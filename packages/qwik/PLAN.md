@@ -428,6 +428,20 @@ broken, that is a Zag-adapter fix — discuss before changing zag.
 
 ## Part 5 — Known issues & open questions (ranked)
 
+0. **Machine fails to wake over real SSR + resume (browser-verified).** In a
+   Qwik 2 router dev app (`vite --mode ssr`, `@qwik.dev/router` 2.0.0-beta.36,
+   core 2.0.0-beta.36), a server-rendered bare `<Checkbox.Root>` never starts
+   its machine on the client: the first interaction triggers resume
+   deserialization, which throws `TypeError: Cannot convert undefined or null
+   to object` at `getOrCreateStore` (core's `allocate`/`getObjectById` path, a
+   serialized store whose target deserializes to null), and clicks do nothing.
+   Found downstream by Park UI's contract smoke test; repro lives at
+   `park-ui/components/qwik/dev/routes/bare` (run `bun run e2e` there). Our
+   browser suite is CSR-only (vitest-browser-qwik `render`), so this path had
+   never been exercised. Suspect the R2 noSerialize api store or a Zag
+   adapter bindable being serialized with a non-serializable target. This
+   blocks all machine interaction in real SSR apps and should be fixed before
+   any Phase 3 porting.
 1. **Wake path under streaming SSR with many machines** — test written
    (`checkbox-ssr.browser.test.tsx`) but SKIPPED: vitest-browser-qwik's
    `renderSSR` cannot resume ANY component in this harness (qwikloader segment
