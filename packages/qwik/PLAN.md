@@ -210,10 +210,12 @@ Solid:
   `useMachine`.
 - **JSX/part structure** → React/Svelte.
 - **`ref`** → Qwik `Signal` refs (no `forwardRef`); compare Solid `composeRefs`.
-- **`asChild`/polymorphic factory** → the hardest piece. Qwik has no
-  children-as-function; re-implement with `<Slot>` / dynamic tag. Prototype
-  early; if full `asChild` parity isn't feasible, define a reduced contract and
-  document it.
+- **polymorphic factory** → `ark.<tag>` must resolve to the **tag string**
+  (`<ark.div>` → `jsx("div", props)`), NOT an inline/`component$` wrapper:
+  Qwik only wires DOM event delegation for spread `on*$` on host elements, and a
+  runtime `Proxy` of `component$` also breaks the optimizer. This is verified
+  (the wrapper version dropped trusted clicks). `asChild` therefore needs a
+  separate mechanism (deferred) — Qwik has no `cloneElement`/children-as-fn.
 - **`useId`** → Qwik `useId()`.
 
 ---
@@ -254,30 +256,26 @@ Suggested order:
     render/screen/userEvent + jest-dom analog Ark uses elsewhere) does **not yet
     support Qwik 2** (Qwik-1 peer only; v2 support in progress), so we use the
     official Qwik 2 utils until it lands.
-  - **Interaction tests are currently BLOCKED on test tooling** and are
-    `describe.skip` in `*.browser.test.tsx` (`vitest.browser.config.ts`). The
-    full evidence chain, established by running it:
-    - The Zag adapter gates all client logic on `@qwik.dev/core/build`'s
-      `isServer`, whose `isBrowser` check is
-      `String(HTMLElement).includes("[native code]")` — `false` in node *and*
-      jsdom. So headless harnesses keep the machine in SSR mode; it never starts.
-      (Verified: machine status stayed `Not Started`; a direct `send` was a
-      no-op.)
-    - `@qwik.dev/core/testing` (`createDOM`/`ssrRenderToDom`) is node-only — it
-      pulls in `domino`, which throws `global is not defined` in a browser.
-    - In a **real browser** (Vitest browser mode + Playwright Chromium, pointed
-      at the pre-installed `/opt/pw-browsers` binary since egress blocks
-      downloads) the component renders correctly and `isServer` is finally
-      `false` — but Qwik's standalone `render()` does **not** establish Qwik's
-      event delegation in that setup, so no handler fires (verified: even a plain
-      `onClick$` button does nothing). Needed `optimizeDeps.noDiscovery` to get
-      past a Vite dep-scan hang over the 86 file-linked Zag TS-source packages.
-    - Resolution: `qwik-testing-library` with Qwik 2 support (in progress) — it
-      sets up a proper Qwik client render + event system. Until then, interaction
-      is validated by Zag's own Playwright e2e against the Qwik example app; the
-      Ark-side `describe.skip` tests are written and ready to enable.
-    - The component itself is verified to render + share machine context + honor
-      controlled props through SSR (`checkbox.test.tsx`, all passing).
+  - **Interaction tests run in a real browser** via **`vitest-browser-qwik`**
+    (`vitest.browser.config.ts`, `*.browser.test.tsx`), whose `render` wires
+    Qwik's client + event system. This is the right tool and is sufficient — no
+    `qwik-testing-library` needed (it's the jsdom/`@testing-library` style
+    adapter and is Qwik-1-only anyway). Setup notes learned the hard way:
+    - Point Playwright at the pre-installed `/opt/pw-browsers` Chromium
+      (`launchOptions.executablePath` + `--no-sandbox`); downloads are blocked by
+      sandbox egress.
+    - `optimizeDeps.noDiscovery: true` to skip the Vite dep-scan, which hangs
+      over the 86 file-linked Zag TS-source packages.
+    - Headless harnesses cannot exercise interaction: `@qwik.dev/core/testing`
+      is node/`domino`-only, and in node/jsdom the adapter's `isServer` is `true`
+      (its `isBrowser` check excludes non-native DOM), so the machine never
+      starts. A real browser is required.
+    - Running these found a **real bug**: the `ark.*` factory was an inline
+      component, so spread `on*$` handlers crossed a component boundary and Qwik
+      treated them as component props — trusted clicks didn't fire (raw
+      zag-style + direct dynamic string tags worked; factory didn't). Fixed by
+      having the `ark` proxy resolve to the **tag string** so `<ark.div>` is a
+      host element. Interaction now verified (toggle + `data-state`).
 - **Repo tooling:** add `'qwik'` to `scripts/check-zag-versions.ts`
   `FRAMEWORK_PACKAGES` and `@zag-js/qwik` to the exempt list; add
   `"qwik": "bun run --cwd packages/qwik"` to root `package.json`; run

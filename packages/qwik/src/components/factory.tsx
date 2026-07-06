@@ -24,28 +24,16 @@ type JsxElements = {
 }
 
 /**
- * Ark elements are Qwik **inline components** (plain functions), not
- * `component$`: the Qwik optimizer only transforms statically-analyzable
- * `component$`/`$` calls, so a runtime `Proxy` of `component$` (as in the
- * React/Solid factories) would never be optimized. Inline components are
- * bundled with their parent, need no transform, and accept `children` directly.
+ * `ark.<tag>` resolves to the **tag string**, so `<ark.div {...props}>` compiles
+ * to `jsx("div", props)` — a host element. This is required for events: Qwik
+ * only wires DOM event delegation for spread `on*$` handlers on host elements.
+ * Routing them through an inline-component boundary (`<ArkDiv {...handlers}>`,
+ * which re-spreads onto an inner element) makes Qwik treat the handlers as
+ * component props instead, and trusted clicks never fire (verified in the
+ * browser). `asChild` will therefore need a different mechanism (PLAN.md §7).
  */
-const cache = new Map<string, ArkComponent<ElementType>>()
-
-const createArkComponent = (tag: string): ArkComponent<ElementType> => {
-  const ArkComponent: ArkComponent<ElementType> = (props) => {
-    const { children, ...rest } = props as Record<string, unknown> & { children?: JSXOutput }
-    const Tag = tag as unknown as ArkComponent<ElementType>
-    return <Tag {...rest}>{children}</Tag>
-  }
-  return ArkComponent
-}
-
 export const ark = new Proxy({} as JsxElements, {
   get(_, element: string) {
-    if (!cache.has(element)) {
-      cache.set(element, createArkComponent(element))
-    }
-    return cache.get(element)
+    return element
   },
-})
+}) as JsxElements
