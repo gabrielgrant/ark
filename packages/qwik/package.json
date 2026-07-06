@@ -41,6 +41,7 @@
   "dependencies": {
     "@zag-js/anatomy": "1.41.2",
     "@zag-js/aria-hidden": "1.41.2",
+    "@zag-js/avatar": "1.41.2",
     "@zag-js/checkbox": "1.41.2",
     "@zag-js/core": "1.41.2",
     "@zag-js/dialog": "1.41.2",
