@@ -30,6 +30,7 @@
     "vue": "bun run --cwd packages/vue",
     "web": "bun run --cwd website",
     "mcp": "bun run --cwd packages/mcp",
+    "qwik": "bun run --cwd packages/qwik",
     "setup": "vc link --scope=chakra-ui -p ark-docs -y && vc env pull website/.env",
     "setup:prod": "vc link --scope=chakra-ui -p ark-docs -y && vc env pull --environment production website/.env",
     "changeset": "changeset",

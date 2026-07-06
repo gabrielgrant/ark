@@ -2,8 +2,16 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { exit } from 'node:process'
 
-const FRAMEWORK_PACKAGES = ['react', 'solid', 'vue', 'svelte']
-const FRAMEWORK_SPECIFIC_ZAG_PACKAGES = ['@zag-js/react', '@zag-js/solid', '@zag-js/vue', '@zag-js/svelte']
+const FRAMEWORK_PACKAGES = ['react', 'solid', 'vue', 'svelte', 'qwik']
+const FRAMEWORK_SPECIFIC_ZAG_PACKAGES = [
+  '@zag-js/react',
+  '@zag-js/solid',
+  '@zag-js/vue',
+  '@zag-js/svelte',
+  // @zag-js/qwik is an unpublished fork pinned to its own version (see
+  // packages/qwik/PLAN.md §3); exempt it from the cross-framework skew check.
+  '@zag-js/qwik',
+]
 
 interface PackageJson {
   dependencies?: Record<string, string>

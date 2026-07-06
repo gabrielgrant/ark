@@ -1,0 +1,62 @@
+{
+  "name": "@ark-ui/qwik",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "A collection of unstyled, accessible UI components for Qwik, utilizing state machines for seamless interaction.",
+  "license": "MIT",
+  "homepage": "https://ark-ui.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chakra-ui/ark.git",
+    "directory": "packages/qwik"
+  },
+  "bugs": {
+    "url": "https://github.com/chakra-ui/ark/issues"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./anatomy": "./src/components/anatomy.ts",
+    "./environment": "./src/providers/environment/index.ts",
+    "./factory": "./src/components/factory.tsx",
+    "./locale": "./src/providers/locale/index.ts",
+    "./*": "./src/components/*/index.ts"
+  },
+  "scripts": {
+    "build": "vite build",
+    "lint": "biome lint ./src",
+    "test": "vitest",
+    "test:ci": "vitest --run",
+    "typecheck": "tsc",
+    "prepack": "clean-package",
+    "postpack": "clean-package restore"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "dependencies": {
+    "@zag-js/anatomy": "1.41.2",
+    "@zag-js/checkbox": "1.41.2",
+    "@zag-js/core": "1.41.2",
+    "@zag-js/dom-query": "1.41.2",
+    "@zag-js/i18n-utils": "1.41.2",
+    "@zag-js/qwik": "1.31.1",
+    "@zag-js/types": "1.41.2",
+    "@zag-js/utils": "1.41.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.16",
+    "@qwik.dev/core": "2.0.0-beta.36",
+    "clean-package": "2.2.0",
+    "typescript": "6.0.3",
+    "vite": "8.0.16",
+    "vitest": "4.1.8"
+  },
+  "peerDependencies": {
+    "@qwik.dev/core": ">=2.0.0-beta.0"
+  },
+  "clean-package": "../../clean-package.config.json"
+}
