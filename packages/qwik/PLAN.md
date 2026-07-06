@@ -26,6 +26,7 @@ machines), built on the **`@zag-js/qwik`** framework adapter.
 | QRL callback props (`onCheckedChange$`, `onOpenChange$`) — Step I3 | ✅ done (rule R9; SSR + browser tested) |
 | Presence (D1) incl. exit-animation unmount, lazyMount | ✅ done + browser-verified |
 | Dialog (D2): all 8 parts, open/escape/close/focus | ✅ done + browser-verified |
+| Field + Fieldset (framework-level providers) | ✅ done; checkbox consumes field context |
 | Typecheck / lint | ✅ clean |
 | Library build (dist output) | ❌ not wired (`build` script is a no-op skip) — Step I2 |
 | `EnvironmentProvider` with custom root node | ⚠️ known-broken over SSR — Step I4 |
@@ -384,7 +385,7 @@ being ported need them (checkbox does not).
    consumers if needed; run the full Done-when gate.
 
 **Porting order** (dependency- and risk-sorted):
-1. Field, Fieldset (many components consume their context)
+1. ✅ Field, Fieldset (checkbox wired to field context; field-item + textarea autoresize deferred)
 2. Switch, Radio Group, Toggle, Toggle Group, Segment Group, Rating Group
 3. Progress, Avatar, Clipboard, QR Code, Timer, Highlight, Format
 4. Collapsible, Accordion, Tabs, Splitter, Steps
@@ -427,8 +428,13 @@ broken, that is a Zag-adapter fix — discuss before changing zag.
 
 ## Part 5 — Known issues & open questions (ranked)
 
-1. **Wake path under streaming SSR with many machines** (Phase 3 checkpoint)
-   — potential Zag-adapter change; coordinate with maintainer.
+1. **Wake path under streaming SSR with many machines** — test written
+   (`checkbox-ssr.browser.test.tsx`) but SKIPPED: vitest-browser-qwik's
+   `renderSSR` cannot resume ANY component in this harness (qwikloader segment
+   fetches 404 on the vitest dev server; reproduced with a trivial local
+   `component$`, URL even lacks the /@fs/ prefix — upstream tooling bug, not
+   zag/Ark). Interim coverage: zag example app's Playwright e2e. Re-enable the
+   test when the harness serves SSR segment modules.
 2. **EnvironmentProvider custom value over SSR** (I4).
 3. **`asChild`** (I5) — API-parity gap to document if dropped.
 4. **Qwik 2 beta churn** — pin `@qwik.dev/core` exactly; expect breakage on

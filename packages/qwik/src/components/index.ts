@@ -1,4 +1,6 @@
 export * from './checkbox/index.ts'
 export * from './dialog/index.ts'
 export * from './factory.tsx'
+export * from './field/index.ts'
+export * from './fieldset/index.ts'
 export * from './presence/index.ts'

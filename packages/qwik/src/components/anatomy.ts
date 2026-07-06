@@ -1,3 +1,5 @@
 export * from '@zag-js/anatomy'
 export { checkboxAnatomy } from './checkbox/checkbox.anatomy.ts'
 export { dialogAnatomy } from './dialog/dialog.anatomy.ts'
+export { fieldAnatomy } from './field/field.anatomy.ts'
+export { fieldsetAnatomy } from './fieldset/fieldset.anatomy.ts'
