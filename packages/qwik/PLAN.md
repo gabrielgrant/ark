@@ -261,11 +261,9 @@ Suggested order:
     Qwik's client + event system. This is the right tool and is sufficient — no
     `qwik-testing-library` needed (it's the jsdom/`@testing-library` style
     adapter and is Qwik-1-only anyway). Setup notes learned the hard way:
-    - Point Playwright at the pre-installed `/opt/pw-browsers` Chromium
-      (`launchOptions.executablePath` + `--no-sandbox`); downloads are blocked by
-      sandbox egress.
-    - `optimizeDeps.noDiscovery: true` to skip the Vite dep-scan, which hangs
-      over the 86 file-linked Zag TS-source packages.
+    - Point Playwright at a pre-installed Chromium when present
+      (`launchOptions.executablePath` + `--no-sandbox`), else fall back to its
+      managed browser; sandbox egress blocks downloads.
     - Headless harnesses cannot exercise interaction: `@qwik.dev/core/testing`
       is node/`domino`-only, and in node/jsdom the adapter's `isServer` is `true`
       (its `isBrowser` check excludes non-native DOM), so the machine never
