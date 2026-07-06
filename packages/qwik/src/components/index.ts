@@ -1,5 +1,6 @@
 export * from './avatar/index.ts'
 export * from './checkbox/index.ts'
+export * from './collapsible/index.ts'
 export * from './dialog/index.ts'
 export * from './factory.tsx'
 export * from './field/index.ts'
