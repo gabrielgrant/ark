@@ -1,3 +1,4 @@
+import { $ } from '@qwik.dev/core'
 import { expect, it } from 'vitest'
 import { render } from 'vitest-browser-qwik'
 import { ComponentUnderTest } from './basic.tsx'
@@ -19,6 +20,21 @@ it('toggles checked when the checkbox is clicked', async () => {
 
   await screen.getByText('Checkbox').click()
   await expect.element(checkbox).not.toBeChecked()
+})
+
+it('invokes the onCheckedChange$ QRL on toggle', async () => {
+  const calls: Array<{ checked: boolean | 'indeterminate' }> = []
+  const screen = await render(
+    <ComponentUnderTest
+      onCheckedChange$={$((details) => {
+        calls.push(details)
+      })}
+    />,
+  )
+
+  await screen.getByText('Checkbox').click()
+  await expect.poll(() => calls.length).toBe(1)
+  expect(calls[0]).toEqual({ checked: true })
 })
 
 it('reflects the checked state on the control part', async () => {

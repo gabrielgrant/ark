@@ -1,3 +1,4 @@
+import { $ } from '@qwik.dev/core'
 import { ssrRenderToDom } from '@qwik.dev/core/testing'
 import { describe, expect, it } from 'vitest'
 import { ComponentUnderTest } from './basic.tsx'
@@ -36,6 +37,13 @@ describe('Checkbox', () => {
     const { document } = await ssrRenderToDom(<ComponentUnderTest checked />, { qwikLoader: true })
 
     expect(document.querySelector('[data-part="control"]')?.getAttribute('data-state')).toBe('checked')
+  })
+
+  it('serializes QRL callback props through SSR', async () => {
+    const { document } = await ssrRenderToDom(<ComponentUnderTest onCheckedChange$={$(() => {})} />, {
+      qwikLoader: true,
+    })
+    expect(document.querySelector('[data-part="root"]')).toBeTruthy()
   })
 
   it('reflects the indeterminate state', async () => {

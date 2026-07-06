@@ -16,7 +16,9 @@ const launchOptions = existsSync(presetChromium)
   : {}
 
 export default defineConfig({
-  plugins: [testSSR(), qwikVite()],
+  // click-to-source dev overlay duplicates text content and breaks strict
+  // locator matches in tests
+  plugins: [testSSR(), qwikVite({ devTools: { clickToSource: false } })],
   test: {
     include: ['src/**/*.browser.test.{ts,tsx}'],
     browser: {

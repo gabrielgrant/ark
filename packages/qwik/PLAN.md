@@ -21,15 +21,16 @@ machines), built on the **`@zag-js/qwik`** framework adapter.
 | --- | --- |
 | Package scaffold (`packages/qwik`), providers, utils, factory | ✅ done |
 | Checkbox pilot (Root/Control/Label/Indicator/HiddenInput) | ✅ done |
-| SSR render + cross-part machine context | ✅ verified (4 vitest tests, node) |
-| Real-browser interaction (click → machine → DOM update) | ✅ verified (2 vitest-browser-qwik tests, Chromium) |
+| SSR render + cross-part machine context | ✅ verified (vitest, node — 12 tests) |
+| Real-browser interaction (click → machine → DOM update) | ✅ verified (vitest-browser-qwik, Chromium — 8 tests) |
+| QRL callback props (`onCheckedChange$`, `onOpenChange$`) — Step I3 | ✅ done (rule R9; SSR + browser tested) |
+| Presence (D1) incl. exit-animation unmount, lazyMount | ✅ done + browser-verified |
+| Dialog (D2): all 8 parts, open/escape/close/focus | ✅ done + browser-verified |
 | Typecheck / lint | ✅ clean |
 | Library build (dist output) | ❌ not wired (`build` script is a no-op skip) — Step I2 |
-| Dialog spike (top layer, presence, focus) | ❌ not started — Phase 1 |
-| Callback props over SSR (`onCheckedChange` etc.) | ⚠️ CSR-verified only; SSR needs a QRL design — Step I3 |
 | `EnvironmentProvider` with custom root node | ⚠️ known-broken over SSR — Step I4 |
 | `asChild` polymorphism | ❌ deferred, needs design — Step I5 |
-| Remaining ~58 components, website, release | ❌ Phases 2–4 |
+| Remaining ~57 components, website, release | ❌ Phases 2–4 |
 
 **Key dependency fact:** `@zag-js/qwik` is an **unpublished fork** (version
 `1.31.1`) living on a branch of the `zag` repo. It is NOT on npm. See Part 1 —
@@ -71,8 +72,8 @@ install fails until you link the local Zag checkout.
    cd packages/qwik
    bun run typecheck                  # tsc, expect exit 0
    bun run lint                       # biome, expect exit 0
-   bunx vitest run                    # headless SSR suite, expect 4 passed
-   bun run test:browser               # Chromium interaction suite, expect 2 passed
+   bunx vitest run                    # headless SSR suite, expect 12 passed
+   bun run test:browser               # Chromium interaction suite, expect 8 passed
    ```
 
 4. **Before committing**, revert the local-link noise so it never lands in
@@ -211,6 +212,34 @@ refs → Qwik `Signal` refs (no `forwardRef`); ids → Qwik `useId()`. When
 porting a component, open the React AND Solid versions side by side (Svelte or
 Vue when those diverge) and pick the cleanest mapping.
 
+### R9. Callback props: ship a `$`-suffixed QRL variant alongside the plain one
+
+Plain function props (`onCheckedChange`, `onOpenChange`) work in CSR but cannot
+be serialized when the component is server-rendered. Convention (implemented in
+`checkbox-root.tsx` / `dialog-root.tsx`, tested both ways):
+
+- Root accepts BOTH `onXChange` (plain, CSR-only) and `onXChange$`
+  (`QRL<...>`, SSR-safe; callers wrap with `$()`).
+- Inside Root's machine-props getter, compose them into the machine's single
+  plain callback: `(details) => { plain?.(details); void qrl?.(details) }`.
+- QRL invocation is async — fine for notification callbacks; NOT fine for
+  callbacks whose synchronous return value or same-tick `preventDefault` the
+  machine consumes (e.g. `onEscapeKeyDown`, `onInteractOutside`). Those stay
+  plain-function-only for now; document per component.
+- Exclude the `$` key from the DOM-spread rest (the component's `ownKeySet`).
+
+### R10. Never pass a member expression to `ref` — extract to a local first
+
+The Qwik 2 optimizer compiles JSX attribute member-expressions
+(`ref={presence?.ref}`) into read-only WrappedSignals for fine-grained
+reactivity; `applyRef` then crashes with `Q31: WrappedSignal is read-only`
+when mounting the element. Assign the signal to a local const and pass the
+identifier: `const contentRef = presence?.ref; ... ref={contentRef}`. Signal
+refs (from `useSignal`) are the right ref primitive (they survive SSR
+serialization); the presence hook forwards the node to the machine with a
+render-time `service.send({ type: 'NODE.SET', ... })`, which is safe pre-start
+because the adapter buffers events until the machine starts.
+
 ---
 
 ## Part 3 — Current package inventory
@@ -232,7 +261,9 @@ packages/qwik/
     ├── components/
     │   ├── factory.tsx           ← ark proxy → tag strings (R1); asChild deferred (I5)
     │   ├── anatomy.ts / index.ts
-    │   └── checkbox/             ← the reference implementation for ALL future ports
+    │   ├── presence/             ← D1: exit-animation unmount, lazyMount/unmountOnExit
+    │   ├── dialog/               ← D2: 8 parts; the reference for overlay components
+    │   └── checkbox/             ← the reference implementation for simple ports
     │       ├── use-checkbox.ts             (machine wiring — copy this shape)
     │       ├── use-checkbox-context.ts     (noSerialize store context — R2)
     │       ├── checkbox-root.tsx           (machine owner; prop splitting)
@@ -262,28 +293,25 @@ bunx vitest run && bun run test:browser` all green in `packages/qwik`, plus
 the step's own criteria, then commit (never commit `../zag` overrides —
 Part 1.4).
 
-### Phase 1 — Dialog spike (proves top layer, presence, focus)
+### Phase 1 — Dialog spike — ✅ DONE (D1, D2; D3 remains)
 
-**D1. Port `Presence`.**
+**D1. Port `Presence`.** ✅ DONE.
 Do: mirror `packages/solid/src/components/presence/` (`use-presence.ts`,
 `presence.tsx`, `split-presence-props.ts`) using the R2 store pattern;
 machine props getter per R4. `<Show when>` becomes conditional JSX.
 Verify: headless test (present/hidden markup, `lazyMount`/`unmountOnExit`
 render strategy) + browser test (mounts on open; with a CSS
 animation, stays mounted until `animationend`).
-Watch for: the presence machine detects exit via `animationend`/
-`transitionend`, which don't bubble — confirm they reach the machine through
-the adapter's event wrapping; if not, this is a Zag-adapter conversation
-(discuss with the maintainer before touching zag).
+Outcome: exit detection works — the presence machine attaches native listeners
+directly to the node (bypassing JSX-prop dispatch), so the non-bubbling concern
+was moot. Browser test covers mounted-through-exit-animation → unmount.
 
-**D2. Port `Dialog`** (compare `packages/react/src/components/dialog/` and
-solid's).
+**D2. Port `Dialog`.** ✅ DONE (all 8 parts).
 Do: parts Root/Trigger/Backdrop/Positioner/Content/Title/Description/
 CloseTrigger; store context per R2; render content inline behind Presence.
-Decide native `<dialog>` vs plain div + Zag focus trap (R7): start with plain
-div (matches Zag's machine assumptions — it already traps focus, hides
-outside content, and blocks scroll) and only reach for `<dialog>`/top-layer
-if stacking-context bugs show up in real usage; record the outcome here.
+Outcome: plain div + Zag focus trap (no native <dialog>). Open, escape,
+close-trigger, and focus-into-content are browser-verified; revisit the top
+layer only if stacking bugs appear in real apps.
 Verify: headless (open/closed markup, aria-*) + browser (trigger click opens,
 escape closes, backdrop click closes, focus moves into content and returns to
 trigger on close).
@@ -310,18 +338,11 @@ packages). Restore `"build"` in package.json (currently an echo-skip so the
 root `bun run build` doesn't fail). Done-when: `bun run build` emits dist, a
 scratch Qwik app can consume a built Checkbox, and root build passes.
 
-**I3. Callback-prop QRL design (SSR correctness) — REQUIRED before broad
-porting.** Today `onCheckedChange` is a plain function prop. That works in
-CSR (browser-verified) but **violates Qwik's serializable-props rule over
-SSR** — a server-rendered `<Checkbox.Root onCheckedChange={fn}>` cannot
-serialize `fn`. Design: accept `onCheckedChange$?: QRL<(details) => void>`
-(Qwik idiom), and inside `use-checkbox` adapt it into the machine's plain
-callback (`(details) => props.onCheckedChange$?.(details)` — QRL invocation
-is async, which is fine for notification callbacks; it is NOT fine for
-callbacks whose return value the machine consumes synchronously — audit each
-machine's props for those and document exceptions). Decide whether to also
-keep plain-function props for CSR-only ergonomics. Apply to checkbox, add an
-SSR test that passes a `$`-callback, and record the convention here.
+**I3. Callback-prop QRL design.** ✅ DONE — codified as rule R9, implemented in
+`checkbox-root.tsx` (`onCheckedChange$`) and `dialog-root.tsx` (`onOpenChange$`,
+`onExitComplete$`); SSR test proves QRL props serialize, browser test proves
+they fire. When porting, apply R9 to each notification callback and document
+any synchronous-return callbacks that must stay plain-function-only.
 
 **I4. EnvironmentProvider over SSR.** The provider currently puts plain
 closures into context — same Q3 crash class as R3 when a custom `value` is
@@ -406,16 +427,14 @@ broken, that is a Zag-adapter fix — discuss before changing zag.
 
 ## Part 5 — Known issues & open questions (ranked)
 
-1. **Callback props over SSR** (I3) — blocks broad porting; decide first.
-2. **Wake path under streaming SSR with many machines** (Phase 3 checkpoint)
+1. **Wake path under streaming SSR with many machines** (Phase 3 checkpoint)
    — potential Zag-adapter change; coordinate with maintainer.
-3. **EnvironmentProvider custom value over SSR** (I4).
-4. **`asChild`** (I5) — API-parity gap to document if dropped.
-5. **Qwik 2 beta churn** — pin `@qwik.dev/core` exactly; expect breakage on
-   bumps ( `_waitUntilRendered`/internal APIs used by the zag adapter are
+2. **EnvironmentProvider custom value over SSR** (I4).
+3. **`asChild`** (I5) — API-parity gap to document if dropped.
+4. **Qwik 2 beta churn** — pin `@qwik.dev/core` exactly; expect breakage on
+   bumps (`_waitUntilRendered`/internal APIs used by the zag adapter are
    especially at risk).
-6. **`Checkbox.Group` parity gap** (I1).
-7. **Presence `animationend` non-bubbling vs adapter dispatch** (D1).
+5. **`Checkbox.Group` parity gap** (I1).
 
 ## Part 6 — Testing quick reference
 
@@ -433,6 +452,8 @@ bun run typecheck && bun run lint
   `await expect.element(...).toBeChecked()/toHaveAttribute(...)`. Name files
   `*.browser.test.tsx` (that suffix is what routes them to the browser
   config and excludes them from the headless run).
+- The browser config disables qwikVite's click-to-source dev overlay — it
+  duplicates on-screen text and breaks strict locator matches.
 - A trusted-click test that finds the element but times out on
   actionability usually means the target is zero-sized (e.g. an empty
   control div whose indicator is `hidden`) — click the label/text instead.

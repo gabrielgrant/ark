@@ -1,8 +1,10 @@
+import type { CheckedChangeDetails } from '@zag-js/checkbox'
 import { mergeProps } from '@zag-js/qwik'
-import { Slot, component$, noSerialize, useStore } from '@qwik.dev/core'
+import { type QRL, Slot, component$ } from '@qwik.dev/core'
 import type { Assign } from '../../types.ts'
+import { useApiStore } from '../../utils/use-api-store.ts'
 import { type HTMLProps, type PolymorphicProps, ark } from '../factory.tsx'
-import { type CheckboxApiStore, CheckboxProvider } from './use-checkbox-context.ts'
+import { CheckboxProvider } from './use-checkbox-context.ts'
 import { type UseCheckboxProps, useCheckbox } from './use-checkbox.ts'
 
 const machinePropKeys = [
@@ -20,9 +22,16 @@ const machinePropKeys = [
   'value',
 ] as const
 
-const machineKeySet = new Set<string>(machinePropKeys)
+const ownKeySet = new Set<string>([...machinePropKeys, 'onCheckedChange$'])
 
-export interface CheckboxRootBaseProps extends UseCheckboxProps, PolymorphicProps<'label'> {}
+export interface CheckboxRootBaseProps extends UseCheckboxProps, PolymorphicProps<'label'> {
+  /**
+   * QRL variant of `onCheckedChange`. Prefer this in Qwik apps: plain function
+   * props cannot be serialized when the component is server-rendered, so
+   * `onCheckedChange` only works for client-only usage.
+   */
+  onCheckedChange$?: QRL<(details: CheckedChangeDetails) => void>
+}
 export interface CheckboxRootProps extends Assign<HTMLProps<'label'>, CheckboxRootBaseProps> {}
 
 export const CheckboxRoot = component$<CheckboxRootProps>((props) => {
@@ -33,16 +42,23 @@ export const CheckboxRoot = component$<CheckboxRootProps>((props) => {
     for (const key of machinePropKeys) {
       if (key in record) machineProps[key] = record[key]
     }
+    const plain = record.onCheckedChange as ((details: CheckedChangeDetails) => void) | undefined
+    const qrl = record.onCheckedChange$ as QRL<(details: CheckedChangeDetails) => void> | undefined
+    if (plain || qrl) {
+      machineProps.onCheckedChange = (details: CheckedChangeDetails) => {
+        plain?.(details)
+        void qrl?.(details)
+      }
+    }
     return machineProps as UseCheckboxProps
   })
 
-  const store = useStore<CheckboxApiStore>({ api: noSerialize(api) })
-  store.api = noSerialize(api)
+  const store = useApiStore(api)
   CheckboxProvider(store)
 
   const rest: Record<string, unknown> = {}
   for (const key in record) {
-    if (!machineKeySet.has(key)) rest[key] = record[key]
+    if (!ownKeySet.has(key)) rest[key] = record[key]
   }
 
   const rootProps = mergeProps(api.getRootProps(), rest)

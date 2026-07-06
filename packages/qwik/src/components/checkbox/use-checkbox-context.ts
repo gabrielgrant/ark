@@ -1,17 +1,15 @@
-import type { NoSerialize } from '@qwik.dev/core'
 import { createContext } from '../../utils/create-context.ts'
+import type { ApiStore } from '../../utils/use-api-store.ts'
 import type { UseCheckboxReturn } from './use-checkbox.ts'
 
 /**
  * The machine `api` is a bag of non-serializable closures, so it is shared as a
- * `noSerialize` value inside a store created by `<Checkbox.Root>`. Parts read
- * `store.api` (subscribing to it) and re-render when the owner re-computes it on
- * activation/resume. `api` is `undefined` while the component is dormant
- * (pre-wake) on the client — parts must guard for it. See PLAN.md §2.
+ * `noSerialize` value inside a store created by `<Checkbox.Root>` (see
+ * `useApiStore`). Parts read `store.api` (subscribing) and re-render when the
+ * owner recomputes it. `api` is `undefined` while the component is dormant
+ * (pre-wake) on the client — parts must guard for it. See PLAN.md, rule R2.
  */
-export interface CheckboxApiStore {
-  api: NoSerialize<UseCheckboxReturn> | undefined
-}
+export interface CheckboxApiStore extends ApiStore<UseCheckboxReturn> {}
 
 export const [CheckboxProvider, useCheckboxStore] = createContext<CheckboxApiStore>({
   name: 'ark.checkbox',
