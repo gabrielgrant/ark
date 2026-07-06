@@ -254,21 +254,30 @@ Suggested order:
     render/screen/userEvent + jest-dom analog Ark uses elsewhere) does **not yet
     support Qwik 2** (Qwik-1 peer only; v2 support in progress), so we use the
     official Qwik 2 utils until it lands.
-  - **Interaction tests** must run in a **real browser**. The Zag Qwik adapter
-    gates all client logic on `@qwik.dev/core/build`'s `isServer`, whose
-    `isBrowser` check is `String(HTMLElement).includes("[native code]")` — this
-    is `false` in node *and* jsdom, so headless harnesses keep the machine in SSR
-    mode and it never starts. We run these via **Vitest browser mode + Playwright
-    Chromium** (`vitest.browser.config.ts`, `*.browser.test.tsx`). In the
-    sandbox, Playwright's browser download is blocked by network egress, so the
-    config points `launchOptions.executablePath` at the pre-installed
-    `/opt/pw-browsers` Chromium. (This is also why Zag e2e-tests its Qwik adapter
-    with Playwright against the example app.) NOTE: in the current sandbox the
-    pre-installed Chromium (build 1194) is skewed from the installed Playwright
-    (1.58 → expects 1208) and the egress policy blocks both the browser download
-    and the version-metadata lookup, so `test:browser` hangs here; it is excluded
-    from the default suite and intended to run in CI with a matching browser, or
-    via `qwik-testing-library` once it supports Qwik 2.
+  - **Interaction tests are currently BLOCKED on test tooling** and are
+    `describe.skip` in `*.browser.test.tsx` (`vitest.browser.config.ts`). The
+    full evidence chain, established by running it:
+    - The Zag adapter gates all client logic on `@qwik.dev/core/build`'s
+      `isServer`, whose `isBrowser` check is
+      `String(HTMLElement).includes("[native code]")` — `false` in node *and*
+      jsdom. So headless harnesses keep the machine in SSR mode; it never starts.
+      (Verified: machine status stayed `Not Started`; a direct `send` was a
+      no-op.)
+    - `@qwik.dev/core/testing` (`createDOM`/`ssrRenderToDom`) is node-only — it
+      pulls in `domino`, which throws `global is not defined` in a browser.
+    - In a **real browser** (Vitest browser mode + Playwright Chromium, pointed
+      at the pre-installed `/opt/pw-browsers` binary since egress blocks
+      downloads) the component renders correctly and `isServer` is finally
+      `false` — but Qwik's standalone `render()` does **not** establish Qwik's
+      event delegation in that setup, so no handler fires (verified: even a plain
+      `onClick$` button does nothing). Needed `optimizeDeps.noDiscovery` to get
+      past a Vite dep-scan hang over the 86 file-linked Zag TS-source packages.
+    - Resolution: `qwik-testing-library` with Qwik 2 support (in progress) — it
+      sets up a proper Qwik client render + event system. Until then, interaction
+      is validated by Zag's own Playwright e2e against the Qwik example app; the
+      Ark-side `describe.skip` tests are written and ready to enable.
+    - The component itself is verified to render + share machine context + honor
+      controlled props through SSR (`checkbox.test.tsx`, all passing).
 - **Repo tooling:** add `'qwik'` to `scripts/check-zag-versions.ts`
   `FRAMEWORK_PACKAGES` and `@zag-js/qwik` to the exempt list; add
   `"qwik": "bun run --cwd packages/qwik"` to root `package.json`; run

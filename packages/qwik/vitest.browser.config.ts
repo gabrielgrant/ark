@@ -8,6 +8,12 @@ import { defineConfig } from 'vite'
 // by the sandbox network egress policy.
 export default defineConfig({
   plugins: [qwikVite()],
+  // Skip the dependency scan (it hangs over the 86 file-linked Zag TS-source
+  // packages); transform them on demand instead. Pre-bundle only the qwik core.
+  optimizeDeps: {
+    noDiscovery: true,
+    include: ['@qwik.dev/core', '@qwik.dev/core/testing'],
+  },
   test: {
     include: ['src/**/*.browser.test.{ts,tsx}'],
     browser: {
