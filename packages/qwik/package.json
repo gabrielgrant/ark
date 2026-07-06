@@ -31,7 +31,8 @@
     "test:ci": "vitest --run",
     "typecheck": "tsc",
     "prepack": "clean-package",
-    "postpack": "clean-package restore"
+    "postpack": "clean-package restore",
+    "test:browser": "vitest run --config vitest.browser.config.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -53,7 +54,10 @@
     "clean-package": "2.2.0",
     "typescript": "6.0.3",
     "vite": "8.0.16",
-    "vitest": "4.1.8"
+    "vitest": "4.1.8",
+    "@vitest/browser": "4.1.8",
+    "playwright": "1.58.0",
+    "@vitest/browser-playwright": "4.1.8"
   },
   "peerDependencies": {
     "@qwik.dev/core": ">=2.0.0-beta.0"

@@ -48,65 +48,55 @@ machine, calls `connect()` → `api`, and puts **`api` into framework context**;
 each part (`Control`, `Label`, `Trigger`, `Content`, …) is a separately-imported
 component that reads `api` from context and spreads `api.getXProps()`.
 
-On Qwik this does **not** translate directly:
+The challenge: the `api` from `connect()` is a bag of **non-serializable
+closures**, and Qwik context/props must be serializable to cross `component$`
+lazy boundaries and survive SSR→resume.
 
-1. **Inline components cannot use `useContext`** (Qwik forbids `use*` hooks in
-   inline components). So parts that read context **must be `component$`** —
-   they cannot be lightweight inline functions. (This invalidates the earlier
-   "make all parts inline components" idea.)
-2. **`component$` parts resume independently** and the `api` from `connect()` is
-   a bag of **non-serializable closures**. Putting it in context as
-   `noSerialize(api)` means it is **dropped on SSR→resume**; a part that resumes
-   on its own interaction sees `undefined`.
-3. Qwik UI (the reference headless lib) sidesteps this entirely: it shares
-   **only serializable values** through context (`Signal`s, `QRL`s, primitives)
-   and **each `component$` part derives its own props locally**. It does not use
-   a centralized `connect()→api`. Zag's model is the opposite.
+### What was tested empirically (`src/__experiments__` during the spike)
 
-### Chosen approach (to validate in the spike)
+- **Inline components CAN use `useContext`, including as projected children**
+  (the exact `<Root><Control/></Root>` shape). Verified with three scenarios
+  (inline-direct, inline-projected, component$-projected) — all read the
+  provider's value. *(This corrects an earlier, wrong assumption that inline
+  parts were impossible.)* So parts may be inline functions OR `component$`.
+- **`component$` parts give finer-grained reactivity** (each is its own render
+  host) and are the chosen default; inline parts re-render their whole enclosing
+  host. Both are viable.
 
-**Every Ark-Qwik part is a `component$`.** The machine owner (`Root` /
-`RootProvider`) calls `useMachine` + `connect`, and shares the live `api`
-through a context **store** holding `noSerialize(api)`:
+### Chosen approach
+
+The machine owner (`Root`) calls `useMachine` + `connect`, and shares the live
+`api` through a context **store** holding `noSerialize(api)` (created *inside*
+`Root`, so the non-serializable api never crosses a prop boundary):
 
 ```
 const api = connect(useMachine(machine, () => props), normalizeProps)
 const store = useStore({ api: noSerialize(api) })   // serializable container
-useContextProvider(XContextId, store)
-// each render writes the fresh api:
-store.api = noSerialize(api)
+CheckboxProvider(store)
+store.api = noSerialize(api)   // rewrite each render so subscribers update
 ```
 
-Parts read the store, **subscribe** to `store.api`, and guard for the dormant
-(pre-wake) phase:
+Parts (`component$`) read `store.api` (subscribing) and guard for the dormant
+(pre-wake) phase. A store/signal is required because Qwik `useContextProvider`
+sets a value once — reactivity across parts needs a mutable container.
 
-```
-const store = useContext(XContextId)
-const api = store.api            // subscribes; undefined while dormant
-return <ark.div {...(api?.getControlProps() ?? serverFallbackProps)} />
-```
+`RootProvider` and the `Context` render-prop part are **omitted on Qwik**:
+passing a pre-built `api` as a `component$` prop violates Qwik's serializable-
+props rule, and children-as-function isn't a Qwik idiom.
 
-Why this can work with the existing adapter: the adapter's wake QRL is emitted
-by `normalizeProps` **during SSR** as the handler for every Zag event prop, and
-on first interaction it **re-executes the owner** (`activatedSig`). When the
-owner re-executes it rebuilds `api` and rewrites `store.api`; parts subscribed to
-`store.api` then re-render and attach live handlers, and the wake replays the
-captured event.
+### Verified vs. still-open
 
-### Open questions the Phase-0 spike MUST answer (may need Zag-adapter changes)
+Verified in the spike (see §9 for how):
+- SSR renders every part with shared context (control/label/input all consistent).
+- Controlled `checked` / `indeterminate` reflect through SSR.
+- No serialization errors (after fixing a real bug — a non-serializable context
+  default threw `Q3`; fixed with a serializable sentinel in `create-context`).
+- Client interaction (click → toggle, `onCheckedChange$`) in a **real browser**.
 
-- During SSR, `normalizeProps` reads a **module-level** `currentWake` set by the
-  owner's `useMachine`. With parts as separate `component$`, confirm the wake
-  QRL is still emitted for parts' event props (Qwik SSR is async/streaming, so
-  the module-level slot may be stale across part renders). If so, the adapter
-  may need to expose the wake via context instead of a module global.
-- Confirm that flipping the owner's `activatedSig` (or rewriting `store.api`)
-  actually **re-renders the parts** and attaches live handlers on resume.
-- If either fails, fallback options: (a) share the `Service` and call `connect`
-  per part; (b) provide `api` via a `Signal` in context and have parts subscribe
-  to it; (c) push a small change into the Zag Qwik adapter to make the
-  owner→part wake/activation explicit. Adapter changes land on the zag
-  `claude/busy-noether-lu8dvd` branch.
+Still to validate as components grow: the SSR→resume **wake** path under
+streaming SSR (the adapter's `currentWake` is a module global; with many
+machines on a page confirm parts still get wake handlers — may need a Zag-adapter
+tweak to route the wake via context). Discuss any Zag change before making it.
 
 Pilot order: **Checkbox** (context, group, hidden input, no portal) →
 **Dialog** (top layer, focus trap, presence). Checkbox proves the resume/context
@@ -256,10 +246,29 @@ Suggested order:
 - **Build/test:** `qwikVite` (needs the Qwik optimizer for `$`/`component$`).
   Output ESM + `.d.ts`; preserve per-component entry points for tree-shaking.
   Remove React's `'use client'` (not a Qwik concept).
-- **Tests:** `vitest` + Qwik testing utils (`@qwik.dev/core/testing` `createDOM`
-  or qwikVite test setup) instead of `@solidjs/testing-library`; keep
-  `vitest-axe`. E2E lives in the Zag repo (Playwright) — the Zag Qwik example
-  app already covers most components.
+- **Tests:** two layers, because of a hard constraint discovered in the spike:
+  - **SSR / render tests** (`vitest`, node) using `@qwik.dev/core/testing`
+    `ssrRenderToDom`. Structured like the other Ark packages (`tests/basic.tsx`
+    `ComponentUnderTest` + `describe/it`). Cover render output, cross-part
+    context, controlled props. `qwik-testing-library` (the `@testing-library`
+    render/screen/userEvent + jest-dom analog Ark uses elsewhere) does **not yet
+    support Qwik 2** (Qwik-1 peer only; v2 support in progress), so we use the
+    official Qwik 2 utils until it lands.
+  - **Interaction tests** must run in a **real browser**. The Zag Qwik adapter
+    gates all client logic on `@qwik.dev/core/build`'s `isServer`, whose
+    `isBrowser` check is `String(HTMLElement).includes("[native code]")` — this
+    is `false` in node *and* jsdom, so headless harnesses keep the machine in SSR
+    mode and it never starts. We run these via **Vitest browser mode + Playwright
+    Chromium** (`vitest.browser.config.ts`, `*.browser.test.tsx`). In the
+    sandbox, Playwright's browser download is blocked by network egress, so the
+    config points `launchOptions.executablePath` at the pre-installed
+    `/opt/pw-browsers` Chromium. (This is also why Zag e2e-tests its Qwik adapter
+    with Playwright against the example app.) NOTE: in the current sandbox the
+    pre-installed Chromium (build 1194) is skewed from the installed Playwright
+    (1.58 → expects 1208) and the egress policy blocks both the browser download
+    and the version-metadata lookup, so `test:browser` hangs here; it is excluded
+    from the default suite and intended to run in CI with a matching browser, or
+    via `qwik-testing-library` once it supports Qwik 2.
 - **Repo tooling:** add `'qwik'` to `scripts/check-zag-versions.ts`
   `FRAMEWORK_PACKAGES` and `@zag-js/qwik` to the exempt list; add
   `"qwik": "bun run --cwd packages/qwik"` to root `package.json`; run
