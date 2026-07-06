@@ -17,7 +17,14 @@ function getErrorMessage(hook: string, provider: string) {
 
 // Serializable sentinel: lets `useContext` return a "not provided" marker
 // instead of throwing (Q8) or serializing a non-serializable default (Q3).
-const NOT_FOUND = { __arkContextNotFound: true }
+const NOT_FOUND_KEY = '__ark_context_not_found__'
+const NOT_FOUND = { [NOT_FOUND_KEY]: true }
+
+// Detect by marker property, NOT identity: Qwik serializes the useContext
+// default into the sequential scope, so after SSR -> resume the sentinel is a
+// deserialized copy with a different object identity.
+const isNotFound = (value: unknown): boolean =>
+  typeof value === 'object' && value !== null && NOT_FOUND_KEY in value
 
 let count = 0
 
@@ -41,7 +48,7 @@ export function createContext<T>(options: CreateContextOptions<T> = {}) {
     // `getRootNode` function) throws Q3, and passing `undefined`/no default
     // throws Q8 when no provider exists. Resolve the real fallback in JS.
     const context = useContext(contextId, NOT_FOUND as T)
-    if ((context as unknown) === NOT_FOUND) {
+    if (isNotFound(context)) {
       if (strict) {
         const error = new Error(errorMessage ?? getErrorMessage(hookName, providerName))
         error.name = 'ContextError'

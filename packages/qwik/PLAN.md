@@ -1,313 +1,438 @@
-# Adding Qwik support to Ark UI
+# @ark-ui/qwik — Implementation Plan & Guide
 
-Status: **Phase 0 (architecture spike) — in progress**
-
-This document is the working plan for `@ark-ui/qwik`, an Ark UI adapter for
-[Qwik](https://qwik.dev) built on the `@zag-js/qwik` Zag adapter
-(branch `qwik-adapter-f` / `claude/busy-noether-lu8dvd` in the sibling `zag`
-checkout). It is grounded in the existing React/Solid/Vue/Svelte Ark packages,
-the Zag Qwik adapter source, and Qwik's official docs + the Qwik UI
-(`qwikifiers/qwik-ui`) reference implementation.
+This document is **self-contained**: it assumes no prior conversation context.
+It is the single source of truth for adding Qwik support to Ark UI, written so
+that any contributor (human or AI) can pick up the work end-to-end. Read Parts
+0–3 fully before writing any code. Every non-obvious rule in Part 2 was
+established **empirically** (by running tests, not by reading docs) — do not
+"simplify" them away without re-running the verification that guards them.
 
 ---
 
-## 1. What the Zag Qwik adapter gives us
+## Part 0 — What this is and current status
 
-`@zag-js/qwik` exposes the same public surface as every other Zag adapter, so
-Ark consumes it like `@zag-js/react`/`solid`:
+**Goal:** an `@ark-ui/qwik` package with the same component API as
+`@ark-ui/react|solid|vue|svelte` (~60 headless components over Zag.js state
+machines), built on the **`@zag-js/qwik`** framework adapter.
 
-- `useMachine(machine, props | () => props): Service<T>` — props may be an
-  object **or** a getter function (Solid/Vue-like live reads). Re-reads props at
-  the event boundary because Qwik commits on its own scheduler.
-- `connect(service, normalizeProps): api`
-- `normalizeProps` — Qwik-flavored (`class`, `$`-suffixed handlers, **style as a
-  string**, lowercased attributes, native event aliases).
-- `mergeProps` (re-exported from `@zag-js/core`).
-- `PropTypes` typed against `QwikIntrinsicElements`.
-- `registerValueSerializer` / `ValueSerializer` — **Qwik-only**; lets machines
-  that keep class instances in context (date-picker `DateValue`, color-picker
-  `Color`) stay SSR-serializable.
+**Status: Phase 0 (architecture spike) COMPLETE and verified.**
 
-It internally solves the hard Zag↔Qwik problems for a **single `component$`**:
-SSR resume via signals (`useBindable`), a "wake" QRL replayed through
-`normalizeProps` for pre-hydration interactions, an rAF render-gate, synchronous
-event dispatch with `currentTarget` re-pointing, and stable style strings so
-popper's CSS custom properties survive re-renders.
+| Concern | Status |
+| --- | --- |
+| Package scaffold (`packages/qwik`), providers, utils, factory | ✅ done |
+| Checkbox pilot (Root/Control/Label/Indicator/HiddenInput) | ✅ done |
+| SSR render + cross-part machine context | ✅ verified (4 vitest tests, node) |
+| Real-browser interaction (click → machine → DOM update) | ✅ verified (2 vitest-browser-qwik tests, Chromium) |
+| Typecheck / lint | ✅ clean |
+| Library build (dist output) | ❌ not wired (`build` script is a no-op skip) — Step I2 |
+| Dialog spike (top layer, presence, focus) | ❌ not started — Phase 1 |
+| Callback props over SSR (`onCheckedChange` etc.) | ⚠️ CSR-verified only; SSR needs a QRL design — Step I3 |
+| `EnvironmentProvider` with custom root node | ⚠️ known-broken over SSR — Step I4 |
+| `asChild` polymorphism | ❌ deferred, needs design — Step I5 |
+| Remaining ~58 components, website, release | ❌ Phases 2–4 |
 
-Constraints it imposes (seen in the Zag Qwik examples):
-- Floating content renders **inline** (`portalled: false`); see §4.
-- Built against **`@qwik.dev/core` 2.0.0-beta** (Qwik 2, pre-release).
-- The adapter is an **unpublished fork** pinned at `1.31.x` (vs Ark's `1.41.x`).
+**Key dependency fact:** `@zag-js/qwik` is an **unpublished fork** (version
+`1.31.1`) living on a branch of the `zag` repo. It is NOT on npm. See Part 1 —
+a fresh `bun install` fails without the bootstrap step.
 
 ---
 
-## 2. THE core architectural problem (read this first)
+## Part 1 — Bootstrap (do this first, nothing works without it)
 
-Ark's React/Solid/Vue/Svelte packages all use one shape: a `Root` builds the
-machine, calls `connect()` → `api`, and puts **`api` into framework context**;
-each part (`Control`, `Label`, `Trigger`, `Content`, …) is a separately-imported
-component that reads `api` from context and spreads `api.getXProps()`.
+⚠️ **A fresh checkout of this branch does not install.** `packages/qwik`
+depends on `@zag-js/qwik@1.31.1`, which 404s on npm. The whole Bun workspace
+install fails until you link the local Zag checkout.
 
-The challenge: the `api` from `connect()` is a bag of **non-serializable
-closures**, and Qwik context/props must be serializable to cross `component$`
-lazy boundaries and survive SSR→resume.
+1. **Clone the Zag fork as a sibling** of the ark repo (the link script finds
+   it by walking up for a `zag` directory):
 
-### What was tested empirically (`src/__experiments__` during the spike)
+   ```bash
+   # layout must be:  <parent>/ark  and  <parent>/zag
+   git clone https://github.com/gabrielgrant/zag ../zag
+   cd ../zag && git checkout qwik-adapter-f   # the Qwik adapter branch
+   ```
 
-- **Inline components CAN use `useContext`, including as projected children**
-  (the exact `<Root><Control/></Root>` shape). Verified with three scenarios
-  (inline-direct, inline-projected, component$-projected) — all read the
-  provider's value. *(This corrects an earlier, wrong assumption that inline
-  parts were impossible.)* So parts may be inline functions OR `component$`.
-- **`component$` parts give finer-grained reactivity** (each is its own render
-  host) and are the chosen default; inline parts re-render their whole enclosing
-  host. Both are viable.
+   The adapter lives at `zag/packages/frameworks/qwik`. **Treat the zag repo
+   as read-only reference** — do not edit it without explicit maintainer
+   sign-off; all deliverable work happens in the ark repo.
 
-### Chosen approach
+2. **Link + install** from the ark repo root:
 
-The machine owner (`Root`) calls `useMachine` + `connect`, and shares the live
-`api` through a context **store** holding `noSerialize(api)` (created *inside*
-`Root`, so the non-serializable api never crosses a prop boundary):
+   ```bash
+   bun run local:sync    # writes ../zag path overrides into root package.json,
+                         # backs up + removes bun.lock, clears node_modules
+   bun install --ignore-scripts   # --ignore-scripts avoids the website's
+                                  # panda postinstall, which needs env vars
+   ```
 
+3. **Verify the toolchain** before changing anything:
+
+   ```bash
+   cd packages/qwik
+   bun run typecheck                  # tsc, expect exit 0
+   bun run lint                       # biome, expect exit 0
+   bunx vitest run                    # headless SSR suite, expect 4 passed
+   bun run test:browser               # Chromium interaction suite, expect 2 passed
+   ```
+
+4. **Before committing**, revert the local-link noise so it never lands in
+   git: `bun run local:revert` (or restore `package.json` overrides to just
+   `flexsearch`/`vite` and restore the backed-up `bun.lock`). The committed
+   tree must not reference `../zag` paths. Check with
+   `git diff package.json bun.lock` — it must be empty.
+
+**Browser-test environment notes** (encoded in `vitest.browser.config.ts`):
+- If Playwright cannot download browsers (sandboxed CI), the config falls back
+  to a pre-installed Chromium at `/opt/pw-browsers/...` when that path exists.
+- Version skew between Playwright and a pre-installed Chromium can make the
+  runner hang at startup; prefer `playwright install chromium` where the
+  network allows.
+- If Vite hangs at "[optimizer] scanning dependencies", the dep-scan is
+  choking on the ~86 path-linked Zag TS-source packages. Clear
+  `node_modules/.vite` first; only if it persists add
+  `optimizeDeps: { noDiscovery: true }` to the config (it was needed once,
+  transiently, and later removed — a stale cache was the real culprit).
+
+---
+
+## Part 2 — Architecture rules (empirically established — do not violate)
+
+Each rule below was proven by a failing test or a crash. The "why" is included
+so future work can tell when a rule stops applying.
+
+### R1. `ark.<tag>` MUST resolve to the tag string (host element)
+
+`src/components/factory.tsx` is a Proxy whose `get` returns the **tag name
+string**, so `<ark.div {...props}>` compiles to `jsx("div", props)` — a host
+element. Qwik only wires DOM event delegation for spread `on*$` handlers on
+host elements. The previous implementation (an inline-component wrapper that
+re-spread props onto an inner element) rendered correct HTML but **silently
+dropped all trusted user events** — clicks did nothing. This was isolated by
+bisection: raw JSX ✅, direct dynamic string tag ✅, inline-component wrapper ❌.
+A `component$`-based factory is also impossible (the optimizer only transforms
+statically analyzable `component$` calls, not runtime Proxies).
+
+### R2. The machine `api` crosses component boundaries ONLY via a noSerialize store
+
+Zag's `connect()` returns an `api` of non-serializable closures. Qwik requires
+context values and `component$` props to be serializable (they may be
+serialized at SSR and resumed later). The working pattern (see
+`checkbox-root.tsx` / `use-checkbox-context.ts`):
+
+```tsx
+// Root (the machine owner) — component$
+const api = checkbox.connect(useMachine(machine, () => machineProps), normalizeProps)
+const store = useStore<XApiStore>({ api: noSerialize(api) })
+store.api = noSerialize(api)      // rewrite EVERY render so subscribers update
+XProvider(store)                  // context carries the (serializable) store
+
+// Part — component$
+const api = useXContext()         // = store.api; subscribing read
+const partProps = api ? mergeProps(api.getPartProps(), props) : props
 ```
-const api = connect(useMachine(machine, () => props), normalizeProps)
-const store = useStore({ api: noSerialize(api) })   // serializable container
-CheckboxProvider(store)
-store.api = noSerialize(api)   // rewrite each render so subscribers update
-```
 
-Parts (`component$`) read `store.api` (subscribing) and guard for the dormant
-(pre-wake) phase. A store/signal is required because Qwik `useContextProvider`
-sets a value once — reactivity across parts needs a mutable container.
+- The store is created **inside** Root, so the api never crosses a prop
+  boundary (passing it as a prop violates Qwik's serializable-props rule —
+  this is why `RootProvider` is omitted, see R6).
+- Parts read `store.api` during render, which subscribes them; when Root
+  re-renders (state change / resume activation) and rewrites `store.api`,
+  parts re-render. Parts must guard `api === undefined` (dormant pre-wake
+  client phase).
+- Reading `api.getXProps()` during a part's render also subscribes the part to
+  the underlying Zag bindable signals — verified: `data-state` updates on
+  parts when the machine transitions.
 
-`RootProvider` and the `Context` render-prop part are **omitted on Qwik**:
-passing a pre-built `api` as a `component$` prop violates Qwik's serializable-
-props rule, and children-as-function isn't a Qwik idiom.
+### R3. Context defaults must be serializable; use the sentinel in `create-context.ts`
 
-### Verified vs. still-open
+Qwik's `useContext(id, default)` **stores and serializes the default** in the
+component's sequential scope. Passing a default containing functions (e.g. an
+environment object with `getRootNode`) crashes SSR with error Q3. Passing no
+default throws Q8 when no provider exists. `src/utils/create-context.ts`
+therefore always passes a serializable `NOT_FOUND` sentinel and resolves the
+real fallback in plain JS. The sentinel is detected **by marker property, not
+object identity** — after SSR→resume the sentinel is a deserialized copy.
 
-Verified in the spike (see §9 for how):
-- SSR renders every part with shared context (control/label/input all consistent).
-- Controlled `checked` / `indeterminate` reflect through SSR.
-- No serialization errors (after fixing a real bug — a non-serializable context
-  default threw `Q3`; fixed with a serializable sentinel in `create-context`).
-- Client interaction (click → toggle, `onCheckedChange$`) in a **real browser**.
+### R4. Machine props are passed as a getter function
 
-Still to validate as components grow: the SSR→resume **wake** path under
-streaming SSR (the adapter's `currentWake` is a module global; with many
-machines on a page confirm parts still get wake handlers — may need a Zag-adapter
-tweak to route the wake via context). Discuss any Zag change before making it.
+`useMachine(machine, () => props)` — the adapter re-reads props at the event
+boundary (Qwik commits renders on its own scheduler, so an event can arrive
+before the render that follows a controlled-prop change). Follow the
+`use-checkbox.ts` shape: build the getter from an explicit key list
+(`machinePropKeys`), mirroring the `createSplitProps` key list used by the
+React/Solid versions of the same component.
 
-Pilot order: **Checkbox** (context, group, hidden input, no portal) →
-**Dialog** (top layer, focus trap, presence). Checkbox proves the resume/context
-model; Dialog proves §4 and §5.
+### R5. Headless tests cannot exercise interaction; use both test layers
 
----
+The adapter gates all client behavior on `@qwik.dev/core/build`'s `isServer`.
+Its `isBrowser` check is
+`String(HTMLElement).includes("[native code]")` — **false in node AND jsdom**,
+so in any headless harness the machine stays in SSR mode and never starts
+(verified: status stays `NotStarted`; `send()` is a no-op). Hence:
 
-## 3. Dependency strategy — work against the branch
+- `tests/<x>.test.tsx` — headless SSR/render tests (`ssrRenderToDom` from
+  `@qwik.dev/core/testing`): markup, cross-part context, controlled props.
+- `tests/<x>.browser.test.tsx` — interaction tests in real Chromium via
+  **`vitest-browser-qwik`** (`render` + locators + `expect.element`). Its
+  `render` wires Qwik's client event system; plain `@qwik.dev/core` `render()`
+  in a browser does NOT (verified: even a trivial `onClick$` never fired).
+  `@qwik.dev/core/testing` cannot run in a browser (its `domino` dep throws
+  `global is not defined`). Do not add `qwik-testing-library` — it is the
+  jsdom-style adapter and (as of writing) Qwik-1-only.
 
-Do **not** block on upstreaming/publishing `@zag-js/qwik`.
+### R6. `RootProvider` and `Context` (render-prop) parts are omitted
 
-- Dev `@ark-ui/qwik` against the local `zag` checkout via the repo's existing
-  link flow (`bun scripts local:sync`, which path-overrides every local
-  `@zag-js/*`). The Qwik adapter already exists at
-  `../zag/packages/frameworks/qwik` on the working branch.
-- Relax `scripts/check-zag-versions.ts` so `@zag-js/qwik`'s fork version
-  (`1.31.x`) does not fail the exact-version-skew check against the suite's
-  `1.41.x` (add `@zag-js/qwik` to the framework-specific exempt list).
-- A publishable `@ark-ui/qwik` release stays gated on the adapter being
-  upstreamed + released; that does not block development.
-- Pin `@qwik.dev/core` exactly (Qwik 2 beta churns).
+Other frameworks ship `XRootProvider` (accepts a user-built `api` as a prop)
+and `XContext` (children-as-function). On Qwik: an `api` prop into `component$`
+violates serializable-props (R2), and children-as-function is not a Qwik idiom
+(children project via `<Slot>`). Revisit only with a new mechanism (e.g. a
+`useX`+`bind:` signal contract); until then Qwik intentionally has API parity
+minus these two parts, and `useX`/`useXContext` hooks cover the escape hatches.
 
----
+### R7. No JS portals — native top layer
 
-## 4. Portals → native top layer (no JS portal)
+Qwik's own guidance (docs → cookbook → portals) is that JS portals don't work
+well with SSR; use native top-layer primitives instead:
+- Modals (dialog/drawer): native `<dialog>` + `showModal()`.
+- Non-modal floating UI (popover/menu/tooltip/select/…): the Popover API
+  (`popover` attribute); Zag's popper still supplies coordinates. Consider the
+  Popover API polyfill for older targets (Qwik UI does this).
+Render everything **inline** (`portalled: false` where machines accept it —
+the Zag Qwik examples do exactly this). Ark's `Portal` component becomes a
+near-no-op kept only for cross-framework API parity; its `container` prop has
+no top-layer equivalent (document as unsupported or fall back to a
+client-only DOM move). Deconflict native `<dialog>`/popover light-dismiss +
+focus behavior with the Zag machine's own (one owner, not both).
 
-Per Qwik's [portals cookbook](https://qwik.dev/docs/cookbook/portals/), Qwik's
-guidance is to **not** use JS portals (they "don't work well with SSR") and
-instead use native top-layer primitives:
+### R8. Follow all four existing frameworks, not just Solid
 
-- **Modals (dialog, drawer, alert dialog)** → native `<dialog>` +
-  `HTMLDialogElement.showModal()` (renders into the browser top layer,
-  escaping `overflow`/stacking with no DOM move). Reconcile with Zag's own
-  focus-trap so focus isn't trapped twice.
-- **Non-modal floating UI (popover, menu, tooltip, hover-card, select,
-  combobox, …)** → the **Popover API** (`popover` attribute) lifts content to
-  the top layer in place; Zag's popper still supplies the fixed coordinates.
-  Ship/peer a Popover API polyfill for older targets (as Qwik UI does).
-
-Implications:
-- Render portalled content **inline** (`portalled: false`), matching the Zag
-  adapter/examples.
-- Ark's `Portal` component becomes a thin/near-no-op on Qwik (renders children
-  inline, optionally toggling top-layer behavior). Keep the name/import for
-  cross-framework parity; document the changed semantics.
-- `Portal`'s `container` prop (portal into an arbitrary element) has no
-  top-layer equivalent — drop on Qwik or fall back to a client-only DOM move
-  for that case.
-- Popover API baseline is recent (~2024) — decide polyfill vs min target.
-- Deconflict native `<dialog>`/Popover light-dismiss/escape/focus with the
-  corresponding Zag machine behavior.
-
----
-
-## 5. Presence / animation
-
-Ark's `Presence` is a thin component over the `@zag-js/presence` **machine** that
-solves *unmount-with-exit-animation* (keep a node mounted while its CSS exit
-animation runs) plus `lazyMount`/`unmountOnExit`. It drives animation purely via
-a `data-state="open|closed"` attribute that users target with their own CSS.
-
-- **Baseline (not custom): port `Presence` like any other machine.** It goes
-  through the Qwik adapter the same way as Checkbox; the `data-state` CSS approach
-  is framework-agnostic and needs no Qwik-specific machinery — cross-browser
-  enter/exit animations with zero custom animation code. Verify the presence
-  machine's exit detection via `animationend`/`transitionend` (which **don't
-  bubble**) survives the adapter's root-level dispatch + `currentTarget`
-  re-pointing.
-- **Optional enhancement: Qwik view transitions**
-  ([cookbook](https://qwik.dev/docs/cookbook/view-transition/)). `document.startViewTransition()`
-  snapshots the outgoing element, so it can replace the "keep mounted during
-  exit" dance for `unmountOnExit`. Offer as progressive enhancement only, not a
-  replacement. Caveats: some pieces are Chromium-only, root transitions are
-  disabled by default (`view-transition-name: none` on `:root`), needs TS 5.6+
-  for `ViewTransition` types.
+Per concern, the closest model differs: props-as-getter → Solid/Vue;
+imperative `create-context` → Svelte; JSX/part structure → React/Svelte;
+refs → Qwik `Signal` refs (no `forwardRef`); ids → Qwik `useId()`. When
+porting a component, open the React AND Solid versions side by side (Svelte or
+Vue when those diverge) and pick the cleanest mapping.
 
 ---
 
-## 6. Package scaffolding — `packages/qwik` (`@ark-ui/qwik`)
+## Part 3 — Current package inventory
 
 ```
 packages/qwik/
-├── package.json        # deps: all @zag-js/* (Ark pinned ver) + @zag-js/qwik; peer @qwik.dev/core
-├── tsconfig.json       # jsxImportSource: @qwik.dev/core
-├── vite.config.ts      # qwikVite — build + test
-├── src/
-│   ├── index.ts
-│   ├── types.ts        # Assign, Optional, MaybeFn (getter-or-value)
-│   ├── utils/          # create-context (Qwik), create-split-props, run-if-fn, index
-│   ├── components/
-│   │   ├── factory.tsx # ark proxy + asChild (Qwik) — §7
-│   │   ├── anatomy.ts
-│   │   ├── index.ts
-│   │   └── <component>/
-│   └── providers/      # environment, locale, interaction
+├── PLAN.md                       ← this file
+├── package.json                  ← deps pinned; @zag-js/qwik 1.31.1 (unpublished, Part 1)
+├── tsconfig.json                 ← jsxImportSource: @qwik.dev/core
+├── biome.json                    ← disables useQwikValidLexicalScope (false-positives
+│                                    on non-QRL utility closures)
+├── vite.config.ts                ← qwikVite; headless vitest (excludes *.browser.test)
+├── vitest.browser.config.ts      ← vitest-browser-qwik + Playwright Chromium
+├── .gitignore                    ← .vitest-attachments/, __screenshots__/
+└── src/
+    ├── index.ts                  ← public entry
+    ├── types.ts                  ← Assign, Optional, MaybeFn
+    ├── utils/                    ← create-context (R3), create-split-props, run-if-fn
+    ├── components/
+    │   ├── factory.tsx           ← ark proxy → tag strings (R1); asChild deferred (I5)
+    │   ├── anatomy.ts / index.ts
+    │   └── checkbox/             ← the reference implementation for ALL future ports
+    │       ├── use-checkbox.ts             (machine wiring — copy this shape)
+    │       ├── use-checkbox-context.ts     (noSerialize store context — R2)
+    │       ├── checkbox-root.tsx           (machine owner; prop splitting)
+    │       ├── checkbox-{control,label,indicator,hidden-input}.tsx
+    │       ├── checkbox.anatomy.ts / checkbox.ts / index.ts
+    │       └── tests/{basic,checkbox.test,checkbox.browser.test}.tsx
+    └── providers/
+        ├── environment/          ← default (document) env works; custom value broken over SSR (I4)
+        └── locale/               ← serializable values; works
 ```
 
-Mirror the other packages' `exports` map (`.`, `./anatomy`, `./factory`,
-`./environment`, `./locale`, `./interaction`, `./*`).
+Repo tooling already wired: root `package.json` has a `qwik` script;
+`scripts/check-zag-versions.ts` includes `'qwik'` and exempts `@zag-js/qwik`
+from the version-skew check.
+
+Not yet ported from checkbox parity with other frameworks: `Checkbox.Group` /
+`GroupProvider` (needs `use-checkbox-group` — framework-level state, no zag
+machine), `RootProvider`/`Context` (intentionally omitted, R6).
 
 ---
 
-## 7. Cross-cutting primitives to design (compare ALL four frameworks)
+## Part 4 — Roadmap
 
-Qwik is a hybrid; pick the closest source per concern rather than transliterating
-Solid:
+Work through these in order. Each step lists **Do / Verify / Done-when**.
+Definition of done for any step: `bun run typecheck && bun run lint &&
+bunx vitest run && bun run test:browser` all green in `packages/qwik`, plus
+the step's own criteria, then commit (never commit `../zag` overrides —
+Part 1.4).
 
-- **`create-context`** → model on **Svelte** (imperative `setContext`/`getContext`
-  ≈ Qwik `useContextProvider`/`useContext`). Returns `[provide, consume, id]`.
-- **Props (getter or value)** → Solid/Vue (live reads); pass `() => props` to
-  `useMachine`.
-- **JSX/part structure** → React/Svelte.
-- **`ref`** → Qwik `Signal` refs (no `forwardRef`); compare Solid `composeRefs`.
-- **polymorphic factory** → `ark.<tag>` must resolve to the **tag string**
-  (`<ark.div>` → `jsx("div", props)`), NOT an inline/`component$` wrapper:
-  Qwik only wires DOM event delegation for spread `on*$` on host elements, and a
-  runtime `Proxy` of `component$` also breaks the optimizer. This is verified
-  (the wrapper version dropped trusted clicks). `asChild` therefore needs a
-  separate mechanism (deferred) — Qwik has no `cloneElement`/children-as-fn.
-- **`useId`** → Qwik `useId()`.
+### Phase 1 — Dialog spike (proves top layer, presence, focus)
+
+**D1. Port `Presence`.**
+Do: mirror `packages/solid/src/components/presence/` (`use-presence.ts`,
+`presence.tsx`, `split-presence-props.ts`) using the R2 store pattern;
+machine props getter per R4. `<Show when>` becomes conditional JSX.
+Verify: headless test (present/hidden markup, `lazyMount`/`unmountOnExit`
+render strategy) + browser test (mounts on open; with a CSS
+animation, stays mounted until `animationend`).
+Watch for: the presence machine detects exit via `animationend`/
+`transitionend`, which don't bubble — confirm they reach the machine through
+the adapter's event wrapping; if not, this is a Zag-adapter conversation
+(discuss with the maintainer before touching zag).
+
+**D2. Port `Dialog`** (compare `packages/react/src/components/dialog/` and
+solid's).
+Do: parts Root/Trigger/Backdrop/Positioner/Content/Title/Description/
+CloseTrigger; store context per R2; render content inline behind Presence.
+Decide native `<dialog>` vs plain div + Zag focus trap (R7): start with plain
+div (matches Zag's machine assumptions — it already traps focus, hides
+outside content, and blocks scroll) and only reach for `<dialog>`/top-layer
+if stacking-context bugs show up in real usage; record the outcome here.
+Verify: headless (open/closed markup, aria-*) + browser (trigger click opens,
+escape closes, backdrop click closes, focus moves into content and returns to
+trigger on close).
+Done-when: both dialog test files green; PLAN Part 0 table updated.
+
+**D3. Port `Portal` as documented near-no-op** (children rendered inline).
+Keep the React `PortalProps` surface; `container`/`disabled` documented as
+no-ops for now (R7).
+
+### Phase 2 — Infrastructure (can interleave with Phase 1)
+
+**I1. Checkbox.Group.** Port `use-checkbox-group.ts` from solid (plain
+framework state, no machine): Qwik signals + `getItemProps`. The group context
+value must be serializable-or-store (R2/R3). Add group tests (max selected,
+disabled propagation).
+
+**I2. Library build.** Wire `vite build` in library mode with the qwik
+optimizer/linker so `dist/` ships optimizer-processed ESM + `.d.ts` with
+per-component entries matching the `exports` map (`.`, `./anatomy`,
+`./factory`, `./environment`, `./locale`, `./*`). Study how
+`vitest-browser-qwik` and Qwik UI build libraries for Qwik 2 (`qwikVite`
+`ssr`/`lib` modes; the `clean-package` prepack flow used by the other Ark
+packages). Restore `"build"` in package.json (currently an echo-skip so the
+root `bun run build` doesn't fail). Done-when: `bun run build` emits dist, a
+scratch Qwik app can consume a built Checkbox, and root build passes.
+
+**I3. Callback-prop QRL design (SSR correctness) — REQUIRED before broad
+porting.** Today `onCheckedChange` is a plain function prop. That works in
+CSR (browser-verified) but **violates Qwik's serializable-props rule over
+SSR** — a server-rendered `<Checkbox.Root onCheckedChange={fn}>` cannot
+serialize `fn`. Design: accept `onCheckedChange$?: QRL<(details) => void>`
+(Qwik idiom), and inside `use-checkbox` adapt it into the machine's plain
+callback (`(details) => props.onCheckedChange$?.(details)` — QRL invocation
+is async, which is fine for notification callbacks; it is NOT fine for
+callbacks whose return value the machine consumes synchronously — audit each
+machine's props for those and document exceptions). Decide whether to also
+keep plain-function props for CSR-only ergonomics. Apply to checkbox, add an
+SSR test that passes a `$`-callback, and record the convention here.
+
+**I4. EnvironmentProvider over SSR.** The provider currently puts plain
+closures into context — same Q3 crash class as R3 when a custom `value` is
+used in SSR (the default document-based path is fine because it's resolved
+client-side via the sentinel fallback). Fix with the R2 store pattern
+(`useStore({ env: noSerialize(...) })`) or by storing a serializable
+locator + deriving closures in the consumer. Add an SSR test with a custom
+root node (shadow-root case).
+
+**I5. `asChild` decision.** Deferred by R1 (the factory renders host
+elements; there is no `cloneElement`/children-as-function in Qwik). Options to
+evaluate: (a) drop `asChild` on Qwik and document composition via
+`useX().getXProps()` spreads; (b) a `<PropsMerge>`-style wrapper using
+`Slot` + attribute forwarding at the DOM level after render (fragile);
+(c) upstream Qwik primitive if one lands. Timebox the investigation; (a) is
+acceptable for a beta. Record the decision here.
+
+**I6. Interaction/focus-visible provider** (`providers/interaction` in
+solid/react) — port `useFocusVisible`/`useInteractionModality` if components
+being ported need them (checkbox does not).
+
+### Phase 3 — Component porting (the long tail)
+
+**The recipe (per component):**
+1. Read the component in `packages/react/src/components/<x>/` AND
+   `packages/solid/src/components/<x>/` (R8). Note the `createSplitProps` key
+   list in Root — that becomes `machinePropKeys`.
+2. Copy the checkbox file shapes: `use-<x>.ts` (R4 getter; env/locale/field
+   contexts), `use-<x>-context.ts` (R2 store), `<x>-root.tsx` (owner),
+   one file per part (`component$`, `<Slot>`, `api ? mergeProps(...) : props`
+   guard), `<x>.anatomy.ts`, `<x>.ts` namespace, `index.ts` exports (minus
+   RootProvider/Context per R6).
+3. Convert callback props per the I3 convention.
+4. Floating/overlay components: inline rendering + top layer per R7.
+5. Tests: `tests/basic.tsx` (ComponentUnderTest) + headless `*.test.tsx`
+   (markup/context/controlled) + `*.browser.test.tsx` (the 2–4 interactions
+   that define the component: open/close, select, type, drag as applicable).
+6. Update `src/components/index.ts`, `anatomy.ts`, and the package `exports`
+   consumers if needed; run the full Done-when gate.
+
+**Porting order** (dependency- and risk-sorted):
+1. Field, Fieldset (many components consume their context)
+2. Switch, Radio Group, Toggle, Toggle Group, Segment Group, Rating Group
+3. Progress, Avatar, Clipboard, QR Code, Timer, Highlight, Format
+4. Collapsible, Accordion, Tabs, Splitter, Steps
+5. Pin Input, Number Input, Editable, Slider, Angle Slider, Password Input
+6. Popover, Tooltip, Hover Card (first Popover-API consumers — expect R7 work)
+7. Menu (+ nested/context menu), Select, Listbox, Combobox, Cascade Select
+8. Tags Input, File Upload, Signature Pad, Scroll Area, Marquee
+9. Date Input, Date Picker, Color Picker — need
+   `registerValueSerializer` from `@zag-js/qwik` for `DateValue`/`Color`
+   SSR-resume; register in the provider layer and document that apps must
+   import it
+10. Toast (global group state), Tour, Floating Panel, Tree View,
+    Navigation Menu, Carousel, Pagination, Image Cropper, Drawer, Frame,
+    Client-Only, Download Trigger, JSON Tree View
+11. Collection helpers (`createListCollection` etc. — mostly re-exports)
+
+After groups 1–5: pause and re-verify the wake path with **many machines on
+one page** (the adapter serializes a module-global wake QRL per machine during
+SSR; confirm interleaved parts still wake correctly under streaming SSR). If
+broken, that is a Zag-adapter fix — discuss before changing zag.
+
+### Phase 4 — Tooling, website, release
+
+- Run/extend repo checks: `bun run check:zag` (already qwik-aware),
+  `check:exports`, `check:anatomy`, `exports:sync` against packages/qwik.
+- Storybook: evaluate Qwik Storybook support; if immature, skip stories for
+  the beta and rely on tests + website examples (note the gap in PRs).
+- Website (`website/src/lib/frameworks.ts` add `'qwik'`; then
+  framework-select, install-cmd, a `stackblitz-qwik.ts`, `llms-qwik.txt`
+  route, MDX/highlighter wiring, per-component `examples/`). Can lag the
+  package.
+- Release gating: `@zag-js/qwik` must be published (upstreaming to
+  chakra-ui/zag or scoped fork) before `@ark-ui/qwik` can ship; align its
+  version with the `@zag-js/*` suite or keep the check-zag exemption. Ship as
+  `0.x`/beta while `@qwik.dev/core` is itself beta. Changeset + README noting
+  Qwik-2-beta peer, no-portal/top-layer semantics, omitted
+  RootProvider/Context, asChild status.
 
 ---
 
-## 8. Component porting (~60 components)
+## Part 5 — Known issues & open questions (ranked)
 
-Per component, replicate the file set used by the other packages (`use-<x>.ts`,
-`<x>-root.tsx`, `<x>-root-provider.tsx`, `<x>-context.tsx`, parts,
-`<x>.anatomy.ts`, `index.ts`, plus `examples/`, `tests/`, stories), adapted to
-the §2 `component$`-with-store pattern. For each, diff react/solid/vue/svelte and
-pick the cleanest mapping onto Qwik.
+1. **Callback props over SSR** (I3) — blocks broad porting; decide first.
+2. **Wake path under streaming SSR with many machines** (Phase 3 checkpoint)
+   — potential Zag-adapter change; coordinate with maintainer.
+3. **EnvironmentProvider custom value over SSR** (I4).
+4. **`asChild`** (I5) — API-parity gap to document if dropped.
+5. **Qwik 2 beta churn** — pin `@qwik.dev/core` exactly; expect breakage on
+   bumps ( `_waitUntilRendered`/internal APIs used by the zag adapter are
+   especially at risk).
+6. **`Checkbox.Group` parity gap** (I1).
+7. **Presence `animationend` non-bubbling vs adapter dispatch** (D1).
 
-Suggested order:
-1. **Spike:** Checkbox, Dialog (architecture + top layer + presence).
-2. Standalone/form: Field, Switch, Radio Group, Pin Input, Number Input,
-   Editable, Progress, Slider, Toggle/Toggle Group, Rating, Avatar, Clipboard,
-   Collapsible, Accordion, Tabs, Segment Group.
-3. Floating/top-layer: Popover, Tooltip, Hover Card, Menu (+ context menu),
-   Select, Combobox, Listbox, Tree View, Navigation Menu.
-4. Complex/locale/serializer: Date Picker, Date Input, Color Picker, File
-   Upload, Tags Input, Toast, Tour, Carousel, Splitter, Pagination, Signature
-   Pad, Steps, Timer, QR Code, Frame, Password Input, Floating Panel, Scroll
-   Area, Marquee, Cascade Select, Drawer, Image Cropper.
-5. Cross-cutting: `Portal`, `Presence`, `Frame`, Field/Fieldset, `Format`.
+## Part 6 — Testing quick reference
 
----
+```bash
+cd packages/qwik
+bunx vitest run                      # headless SSR suite (vite.config.ts)
+bun run test:browser                 # Chromium interaction suite
+bun run typecheck && bun run lint
+```
 
-## 9. Build, test, tooling
-
-- **Build/test:** `qwikVite` (needs the Qwik optimizer for `$`/`component$`).
-  Output ESM + `.d.ts`; preserve per-component entry points for tree-shaking.
-  Remove React's `'use client'` (not a Qwik concept).
-- **Tests:** two layers, because of a hard constraint discovered in the spike:
-  - **SSR / render tests** (`vitest`, node) using `@qwik.dev/core/testing`
-    `ssrRenderToDom`. Structured like the other Ark packages (`tests/basic.tsx`
-    `ComponentUnderTest` + `describe/it`). Cover render output, cross-part
-    context, controlled props. `qwik-testing-library` (the `@testing-library`
-    render/screen/userEvent + jest-dom analog Ark uses elsewhere) does **not yet
-    support Qwik 2** (Qwik-1 peer only; v2 support in progress), so we use the
-    official Qwik 2 utils until it lands.
-  - **Interaction tests run in a real browser** via **`vitest-browser-qwik`**
-    (`vitest.browser.config.ts`, `*.browser.test.tsx`), whose `render` wires
-    Qwik's client + event system. This is the right tool and is sufficient — no
-    `qwik-testing-library` needed (it's the jsdom/`@testing-library` style
-    adapter and is Qwik-1-only anyway). Setup notes learned the hard way:
-    - Point Playwright at a pre-installed Chromium when present
-      (`launchOptions.executablePath` + `--no-sandbox`), else fall back to its
-      managed browser; sandbox egress blocks downloads.
-    - Headless harnesses cannot exercise interaction: `@qwik.dev/core/testing`
-      is node/`domino`-only, and in node/jsdom the adapter's `isServer` is `true`
-      (its `isBrowser` check excludes non-native DOM), so the machine never
-      starts. A real browser is required.
-    - Running these found a **real bug**: the `ark.*` factory was an inline
-      component, so spread `on*$` handlers crossed a component boundary and Qwik
-      treated them as component props — trusted clicks didn't fire (raw
-      zag-style + direct dynamic string tags worked; factory didn't). Fixed by
-      having the `ark` proxy resolve to the **tag string** so `<ark.div>` is a
-      host element. Interaction now verified (toggle + `data-state`).
-- **Repo tooling:** add `'qwik'` to `scripts/check-zag-versions.ts`
-  `FRAMEWORK_PACKAGES` and `@zag-js/qwik` to the exempt list; add
-  `"qwik": "bun run --cwd packages/qwik"` to root `package.json`; run
-  `exports:sync`/`check:exports`/`check:anatomy` against the new package.
-
----
-
-## 10. Website / docs
-
-`website/src/lib/frameworks.ts`: add `'qwik'`. Then wire `framework-select`,
-`install-cmd`, `stackblitz-qwik.ts`, `example`/`example-code`, `code-examples`,
-`llms-qwik.txt`, MDX/highlighter, and per-component Qwik `examples/`. Can lag the
-package release (ship package first, docs incrementally).
-
----
-
-## 11. Phasing
-
-- **Phase 0 — spike (de-risk):** scaffold + factory/`asChild` + providers +
-  Portal/Presence; port Checkbox + Dialog; answer §2's open questions; decide
-  whether Zag-adapter changes are needed. **Go/no-go gate.**
-- **Phase 1 — core release:** port §8 groups 2–3; wire build/tests/`check:*`;
-  publish `@ark-ui/qwik` (beta) once the adapter is upstreamed.
-- **Phase 2 — complete components:** §8 group 4 incl. serializer-dependent.
-- **Phase 3 — docs/website.**
-
----
-
-## 12. Risks
-
-1. **§2 compound-component resume** — the real unknown; may force Zag-adapter
-   changes. De-risk in the spike before mass porting.
-2. **`@zag-js/qwik` unpublished fork on Qwik 2 beta** — dev against branch; gate
-   release on upstreaming.
-3. **`asChild`/factory feasibility** on Qwik (§7).
-4. **Native top-layer vs Zag focus/dismiss** deconfliction (§4).
-5. **Qwik 2 beta churn.**
+- Headless tests: import `ssrRenderToDom` from `@qwik.dev/core/testing`,
+  pass `{ qwikLoader: true }`, assert on `document.querySelector(...)`.
+- Browser tests: `import { render } from 'vitest-browser-qwik'`, then
+  `screen.getByRole(...)/getByText(...).click()` and
+  `await expect.element(...).toBeChecked()/toHaveAttribute(...)`. Name files
+  `*.browser.test.tsx` (that suffix is what routes them to the browser
+  config and excludes them from the headless run).
+- A trusted-click test that finds the element but times out on
+  actionability usually means the target is zero-sized (e.g. an empty
+  control div whose indicator is `hidden`) — click the label/text instead.
