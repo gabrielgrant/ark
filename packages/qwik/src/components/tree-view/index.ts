@@ -1,15 +1,15 @@
 export type {
-  CheckedChangeDetails,
-  ExpandedChangeDetails,
-  FocusChangeDetails,
-  LoadChildrenCompleteDetails,
-  LoadChildrenDetails,
-  LoadChildrenErrorDetails,
-  NodeProps,
-  NodeState,
-  RenameCompleteDetails,
-  RenameStartDetails,
-  SelectionChangeDetails,
+  CheckedChangeDetails as TreeViewCheckedChangeDetails,
+  ExpandedChangeDetails as TreeViewExpandedChangeDetails,
+  FocusChangeDetails as TreeViewFocusChangeDetails,
+  LoadChildrenCompleteDetails as TreeViewLoadChildrenCompleteDetails,
+  LoadChildrenDetails as TreeViewLoadChildrenDetails,
+  LoadChildrenErrorDetails as TreeViewLoadChildrenErrorDetails,
+  NodeProps as TreeViewNodeProps,
+  NodeState as TreeViewNodeState,
+  RenameCompleteDetails as TreeViewRenameCompleteDetails,
+  RenameStartDetails as TreeViewRenameStartDetails,
+  SelectionChangeDetails as TreeViewSelectionChangeDetails,
 } from '@zag-js/tree-view'
 export { createFileTreeCollection, createTreeCollection, type TreeCollection, type TreeNode } from '../collection.ts'
 export { TreeViewBranch, type TreeViewBranchBaseProps, type TreeViewBranchProps } from './tree-view-branch.tsx'

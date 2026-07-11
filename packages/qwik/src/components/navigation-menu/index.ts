@@ -1,4 +1,4 @@
-export type { ValueChangeDetails } from '@zag-js/navigation-menu'
+export type { ValueChangeDetails as NavigationMenuValueChangeDetails } from '@zag-js/navigation-menu'
 export { NavigationMenuArrow, type NavigationMenuArrowBaseProps, type NavigationMenuArrowProps } from './navigation-menu-arrow.tsx'
 export {
   NavigationMenuContent,
