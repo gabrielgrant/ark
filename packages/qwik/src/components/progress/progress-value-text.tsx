@@ -10,9 +10,13 @@ export const ProgressValueText = component$<ProgressValueTextProps>((props) => {
   const api = useProgressContext()
   const valueTextProps = api ? mergeProps(api.getValueTextProps(), props) : props
 
+  // rule R13: Slot fallbacks (`<Slot>{derived}</Slot>`) go stale when the
+  // derived value reads a noSerialize store — render the value as a sibling
+  // expression next to an always-claimed empty Slot instead
   return (
     <ark.span {...valueTextProps}>
-      <Slot>{api?.percentAsString}</Slot>
+      {api?.percentAsString}
+      <Slot />
     </ark.span>
   )
 })
