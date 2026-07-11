@@ -265,6 +265,9 @@ Accordion.ItemIndicator; only the SSR test gate catches this class.)
   `api.getXProps()` (which carries a Dict index signature) as the first arg.
 - `Assign<HTMLProps<E>, ...>`-based prop interfaces sometimes reject a direct
   `as Record<string, unknown>` cast (TS2352): cast through `unknown`.
+- Tag-typed api getters (`getLabelProps`/`getTriggerProps` typed against a
+  specific element's ref) may need double casts through
+  `Record<string, unknown>` when merged with typed component props.
 - Callbacks the machine consumes synchronously (e.g. tabs' `navigate`,
   `onEscapeKeyDown`-style interceptors, pin-input's `sanitizeValue`, slider's
   `getAriaValueText`) get NO `$` QRL variant (R9) — plain function only; note
@@ -278,6 +281,17 @@ re-render on store updates (verified with a minimal repro: a plain
 serializable store updates fine; noSerialize does not). Render the derived
 value as a sibling JSX expression next to an always-claimed empty Slot:
 `{api?.derivedValue}<Slot />`. Applies to every ValueText/Preview-style part.
+
+### R15. Class-instance machine props need `noSerialize` at the prop boundary
+
+`collection` (ListCollection) and similar class-instance props DO enter Root
+as normal `component$` props, so Qwik's SSR serializer sees them (crash Q20).
+Call `noSerialize(record.collection)` in Root before use — noSerialize marks
+the object by reference (global WeakSet), which works even for prop-delivered
+values. Caveat (documented in listbox/select roots): after a true
+SSR-serialize-then-resume round trip the value deserializes as `undefined`;
+consumers must re-provide it client-side (same category as the R9 plain-
+callback CSR caveat).
 
 ### R14. Browser-test fixtures for zero-size draggable parts
 
@@ -440,7 +454,9 @@ being ported need them (checkbox does not).
 5. Pin Input, Number Input, Editable, Slider, Angle Slider, Password Input
 6. ✅ Popover, Tooltip, Hover Card — R7 validated for real: popper's --x/--y
    custom properties land on the inline Positioner, no portal needed
-7. Menu (+ nested/context menu), Select, Listbox, Combobox, Cascade Select
+7. ✅ Menu (nested-menu wiring architecturally done; interactive nested browser
+   test dropped as flaky pending Part 5 #0 adapter fix), ✅ Select, ✅ Listbox
+   (+ ✅ collection helper); remaining: Combobox, Cascade Select
 8. Tags Input, File Upload, Signature Pad, Scroll Area, Marquee
 9. Date Input, Date Picker, Color Picker — need
    `registerValueSerializer` from `@zag-js/qwik` for `DateValue`/`Color`
