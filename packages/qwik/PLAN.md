@@ -471,7 +471,9 @@ being ported need them (checkbox does not).
    `registerValueSerializer` from `@zag-js/qwik` for `DateValue`/`Color`
    SSR-resume; register in the provider layer and document that apps must
    import it
-10. Toast (global group state), Tour, Floating Panel, Tree View,
+10. ✅ Tree View, ✅ Navigation Menu, ✅ Cascade Select (designed from the zag
+    machine directly — no other framework port exists); remaining:
+    Toast (global group state), Tour, Floating Panel,
     Navigation Menu, Carousel, Pagination, Image Cropper, Drawer, Frame,
     Client-Only, Download Trigger, JSON Tree View
 11. Collection helpers (`createListCollection` etc. — mostly re-exports)
@@ -510,6 +512,14 @@ broken, that is a Zag-adapter fix — discuss before changing zag.
    uses hover instead, documented in the test file). THIS IS A ZAG-ADAPTER
    FIX (machine.ts effect lifecycle) — do not change zag without maintainer
    sign-off; flagged for discussion.
+
+0b. **Zag adapter: capture-phase re-dispatch can swallow clicks.** A real
+   pointer click on an element whose ANCESTOR has tabIndex + an onFocus
+   handler calling `event.stopPropagation()` (tree-view items) loses the
+   click through the adapter's document-capture `wrapHandler` re-dispatch.
+   Isolated by bisection (raw div fine; zag-wired div broken; removing the
+   onFocus fixes it). Tests work around via native `element.click()`. Same
+   do-not-touch-zag rule; flagged for discussion together with #0.
 
 1. **Wake path under streaming SSR with many machines** — test written
    (`checkbox-ssr.browser.test.tsx`) but SKIPPED: vitest-browser-qwik's
