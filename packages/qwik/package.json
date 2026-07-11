@@ -56,6 +56,7 @@
     "@zag-js/radio-group": "1.41.2",
     "@zag-js/remove-scroll": "1.41.2",
     "@zag-js/switch": "1.41.2",
+    "@zag-js/toggle": "1.41.2",
     "@zag-js/types": "1.41.2",
     "@zag-js/utils": "1.41.2"
   },
