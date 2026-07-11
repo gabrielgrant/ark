@@ -1,3 +1,4 @@
+export * from './accordion/index.ts'
 export * from './avatar/index.ts'
 export * from './checkbox/index.ts'
 export * from './collapsible/index.ts'
