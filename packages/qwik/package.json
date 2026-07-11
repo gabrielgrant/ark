@@ -52,6 +52,7 @@
     "@zag-js/i18n-utils": "1.41.2",
     "@zag-js/interact-outside": "1.41.2",
     "@zag-js/presence": "1.41.2",
+    "@zag-js/progress": "1.41.2",
     "@zag-js/qwik": "1.31.1",
     "@zag-js/radio-group": "1.41.2",
     "@zag-js/remove-scroll": "1.41.2",
