@@ -59,6 +59,7 @@
     "@zag-js/pin-input": "1.41.2",
     "@zag-js/presence": "1.41.2",
     "@zag-js/progress": "1.41.2",
+    "@zag-js/qr-code": "1.41.2",
     "@zag-js/qwik": "1.31.1",
     "@zag-js/radio-group": "1.41.2",
     "@zag-js/rating-group": "1.41.2",
