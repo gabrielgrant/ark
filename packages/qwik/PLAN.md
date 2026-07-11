@@ -89,6 +89,12 @@ install fails until you link the local Zag checkout.
 - Version skew between Playwright and a pre-installed Chromium can make the
   runner hang at startup; prefer `playwright install chromium` where the
   network allows.
+- bun does not resolve transitive deps for some deep file:-linked packages:
+  `@zag-js/popper`'s `@floating-ui/*` (and dom-query/utils) can be missing
+  from its .bun instance, breaking typecheck for popper consumers
+  (popover/tooltip/hover-card). Symlink them into
+  `node_modules/.bun/@zag-js+popper*/node_modules/@zag-js/popper/node_modules/`
+  (node_modules-only fix; never touches package.json/bun.lock).
 - If Vite hangs at "[optimizer] scanning dependencies", the dep-scan is
   choking on the ~86 path-linked Zag TS-source packages. Clear
   `node_modules/.vite` first; only if it persists add
@@ -432,7 +438,8 @@ being ported need them (checkbox does not).
 3. Progress, Avatar, Clipboard, QR Code, Timer, Highlight, Format
 4. Collapsible, Accordion, Tabs, Splitter, Steps
 5. Pin Input, Number Input, Editable, Slider, Angle Slider, Password Input
-6. Popover, Tooltip, Hover Card (first Popover-API consumers — expect R7 work)
+6. ✅ Popover, Tooltip, Hover Card — R7 validated for real: popper's --x/--y
+   custom properties land on the inline Positioner, no portal needed
 7. Menu (+ nested/context menu), Select, Listbox, Combobox, Cascade Select
 8. Tags Input, File Upload, Signature Pad, Scroll Area, Marquee
 9. Date Input, Date Picker, Color Picker — need
@@ -469,6 +476,15 @@ broken, that is a Zag-adapter fix — discuss before changing zag.
 ---
 
 ## Part 5 — Known issues & open questions (ranked)
+
+0. **Zag adapter: root-level machine effects only run on the first
+   INIT_STATE transition** — a machine that starts (and stays) in its initial
+   state never attaches root effects. Concrete symptom: tooltip's
+   `trackFocusVisible` never wires, so keyboard-focus never opens a tooltip
+   (confirmed with a standalone @zag-js/focus-visible repro; the browser test
+   uses hover instead, documented in the test file). THIS IS A ZAG-ADAPTER
+   FIX (machine.ts effect lifecycle) — do not change zag without maintainer
+   sign-off; flagged for discussion.
 
 1. **Wake path under streaming SSR with many machines** — test written
    (`checkbox-ssr.browser.test.tsx`) but SKIPPED: vitest-browser-qwik's
