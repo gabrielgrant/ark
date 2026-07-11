@@ -61,6 +61,7 @@
     "@zag-js/radio-group": "1.41.2",
     "@zag-js/rating-group": "1.41.2",
     "@zag-js/remove-scroll": "1.41.2",
+    "@zag-js/slider": "1.41.2",
     "@zag-js/switch": "1.41.2",
     "@zag-js/tabs": "1.41.2",
     "@zag-js/toggle": "1.41.2",
