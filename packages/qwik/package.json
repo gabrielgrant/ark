@@ -62,6 +62,7 @@
     "@zag-js/menu": "1.41.2",
     "@zag-js/number-input": "1.41.2",
     "@zag-js/pagination": "1.41.2",
+    "@zag-js/password-input": "1.41.2",
     "@zag-js/pin-input": "1.41.2",
     "@zag-js/popover": "1.41.2",
     "@zag-js/presence": "1.41.2",
