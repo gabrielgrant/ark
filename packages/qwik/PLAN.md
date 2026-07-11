@@ -260,8 +260,26 @@ Accordion.ItemIndicator; only the SSR test gate catches this class.)
 - `Assign<HTMLProps<E>, ...>`-based prop interfaces sometimes reject a direct
   `as Record<string, unknown>` cast (TS2352): cast through `unknown`.
 - Callbacks the machine consumes synchronously (e.g. tabs' `navigate`,
-  `onEscapeKeyDown`-style interceptors) get NO `$` QRL variant (R9) — plain
-  function only; note it in the component.
+  `onEscapeKeyDown`-style interceptors, pin-input's `sanitizeValue`, slider's
+  `getAriaValueText`) get NO `$` QRL variant (R9) — plain function only; note
+  it in the component.
+
+### R13. Never render machine-derived values as Slot fallbacks
+
+`<Slot>{api?.derivedValue}</Slot>` goes STALE (or blank) when the value reads
+a noSerialize context store (the R2 pattern) — the fallback does not
+re-render on store updates (verified with a minimal repro: a plain
+serializable store updates fine; noSerialize does not). Render the derived
+value as a sibling JSX expression next to an always-claimed empty Slot:
+`{api?.derivedValue}<Slot />`. Applies to every ValueText/Preview-style part.
+
+### R14. Browser-test fixtures for zero-size draggable parts
+
+Slider-style thumbs render 0×0 unstyled (and zag may keep them
+`visibility: hidden` until a ResizeObserver measures them) — Playwright
+actionability then times out. Give thumbs explicit width/height inline styles
+in the test fixture, and prefer keyboard interaction (focus + arrow keys,
+asserting `aria-valuenow`) over pointer dragging.
 
 ---
 
@@ -408,7 +426,8 @@ being ported need them (checkbox does not).
 
 **Porting order** (dependency- and risk-sorted):
 1. ✅ Field, Fieldset (checkbox wired to field context; field-item + textarea autoresize deferred)
-2. ✅ Switch, Radio Group, Toggle, Toggle Group, Segment Group, Rating Group
+2. ✅ Switch, Radio Group, Toggle, Toggle Group, Segment Group, Rating Group,
+   Pin Input, Number Input, Editable, Slider, Angle Slider
    (+ ✅ Progress, Avatar, Collapsible, Accordion, Tabs from groups 3–4)
 3. Progress, Avatar, Clipboard, QR Code, Timer, Highlight, Format
 4. Collapsible, Accordion, Tabs, Splitter, Steps
