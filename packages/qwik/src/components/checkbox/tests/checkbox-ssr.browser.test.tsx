@@ -26,12 +26,15 @@ const MultiCheckbox = component$(() => (
  * Rendered via real SSR + browser resume (renderSSR), then interacted with in
  * arbitrary order.
  *
- * SKIPPED: vitest-browser-qwik's renderSSR cannot currently resume ANY
- * component in this setup — the qwikloader's segment fetches
- * (`<file>_<symbol>.js`) 404 on the vitest dev server, verified with a
- * trivial local `component$` (not zag-related; the URL even lacks the /@fs/
- * prefix). Re-enable once the harness serves SSR segment modules; until then
- * the wake path is exercised by the zag example app's Playwright e2e.
+ * SKIPPED pending a released vitest-browser-qwik with the SSR-resume fix.
+ * The upstream defect (QRL segment fetches 404 after renderSSR resume) is
+ * fixed on the fork branch gabrielgrant/vitest-browser-qwik#fix/ssr-segment-mapping
+ * (regression-tested there, 17/17, incl. a TS-source node_modules dependency
+ * case). Running THIS test against the patched plugin inside ark is still
+ * blocked by bun-layout dev-server issues unrelated to the fix (multi-instance
+ * .bun trees break the node-side client env's module resolution; zag adapter
+ * segments served via /@fs from out-of-root paths). Re-enable once ark consumes
+ * a published plugin version containing the fix.
  */
 it.skip('resumes multiple SSR machines independently and wakes each on interaction', async () => {
   const screen = await renderSSR(<MultiCheckbox />)
