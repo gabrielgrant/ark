@@ -241,6 +241,28 @@ serialization); the presence hook forwards the node to the machine with a
 render-time `service.send({ type: 'NODE.SET', ... })`, which is safe pre-start
 because the adapter buffers events until the machine starts.
 
+### R11. Respect HTML content models in SSR; always claim `<Slot/>`
+
+Qwik SSR enforces HTML content-model rules strictly (error Q12), unlike
+jsdom/browsers: parts that render inside interactive elements (indicators
+inside a `<button>` trigger/root) must default to `<span>`, not `<div>`.
+Related: NEVER render `<Slot/>` conditionally — an unclaimed projection leaves
+a `<q:template>` marker at the component's position, which also trips the
+content-model check. Always claim the Slot and toggle a wrapper's `hidden`
+attribute instead of branching the JSX. (Found via Toggle.Indicator and
+Accordion.ItemIndicator; only the SSR test gate catches this class.)
+
+### R12. Type-friction standard fixes
+
+- zag's `mergeProps` infers from ALL args: anatomy `parts.<x>.attrs` literals
+  need `as Record<string, string>` (React does the same); otherwise keep an
+  `api.getXProps()` (which carries a Dict index signature) as the first arg.
+- `Assign<HTMLProps<E>, ...>`-based prop interfaces sometimes reject a direct
+  `as Record<string, unknown>` cast (TS2352): cast through `unknown`.
+- Callbacks the machine consumes synchronously (e.g. tabs' `navigate`,
+  `onEscapeKeyDown`-style interceptors) get NO `$` QRL variant (R9) — plain
+  function only; note it in the component.
+
 ---
 
 ## Part 3 — Current package inventory
@@ -386,7 +408,8 @@ being ported need them (checkbox does not).
 
 **Porting order** (dependency- and risk-sorted):
 1. ✅ Field, Fieldset (checkbox wired to field context; field-item + textarea autoresize deferred)
-2. Switch, Radio Group, Toggle, Toggle Group, Segment Group, Rating Group
+2. ✅ Switch, Radio Group, Toggle, Toggle Group, Segment Group, Rating Group
+   (+ ✅ Progress, Avatar, Collapsible, Accordion, Tabs from groups 3–4)
 3. Progress, Avatar, Clipboard, QR Code, Timer, Highlight, Format
 4. Collapsible, Accordion, Tabs, Splitter, Steps
 5. Pin Input, Number Input, Editable, Slider, Angle Slider, Password Input
