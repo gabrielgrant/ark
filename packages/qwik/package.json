@@ -56,6 +56,7 @@
     "@zag-js/progress": "1.41.2",
     "@zag-js/qwik": "1.31.1",
     "@zag-js/radio-group": "1.41.2",
+    "@zag-js/rating-group": "1.41.2",
     "@zag-js/remove-scroll": "1.41.2",
     "@zag-js/switch": "1.41.2",
     "@zag-js/tabs": "1.41.2",
