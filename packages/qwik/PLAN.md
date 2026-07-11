@@ -293,6 +293,14 @@ SSR-serialize-then-resume round trip the value deserializes as `undefined`;
 consumers must re-provide it client-side (same category as the R9 plain-
 callback CSR caveat).
 
+### R16. Interactive fixtures live in tests/basic.tsx, never in *.browser.test.tsx
+
+A `component$` handler closing over module scope compiles its lazy QRL
+segment as an import of the ORIGINATING module. If that module is a browser
+test file, loading the segment re-executes the file's top-level `it(...)`
+calls — vitest rejects with "Calling the test function inside another test
+function". Keep all interactive fixtures in `tests/basic.tsx`.
+
 ### R14. Browser-test fixtures for zero-size draggable parts
 
 Slider-style thumbs render 0×0 unstyled (and zag may keep them
@@ -456,8 +464,9 @@ being ported need them (checkbox does not).
    custom properties land on the inline Positioner, no portal needed
 7. ✅ Menu (nested-menu wiring architecturally done; interactive nested browser
    test dropped as flaky pending Part 5 #0 adapter fix), ✅ Select, ✅ Listbox
-   (+ ✅ collection helper); remaining: Combobox, Cascade Select
-8. Tags Input, File Upload, Signature Pad, Scroll Area, Marquee
+   (+ ✅ collection helper); ✅ Combobox; remaining: Cascade Select
+8. ✅ Tags Input, ✅ Pagination, ✅ Password Input; remaining: File Upload,
+   Signature Pad, Scroll Area, Marquee
 9. Date Input, Date Picker, Color Picker — need
    `registerValueSerializer` from `@zag-js/qwik` for `DateValue`/`Color`
    SSR-resume; register in the provider layer and document that apps must
