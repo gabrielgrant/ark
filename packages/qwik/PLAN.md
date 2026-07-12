@@ -89,6 +89,11 @@ install fails until you link the local Zag checkout.
 - Version skew between Playwright and a pre-installed Chromium can make the
   runner hang at startup; prefer `playwright install chromium` where the
   network allows.
+- bun installs reset @internationalized/date transitive links: zag packages
+  pin a 3.12.1 devDep colliding with the workspace's 3.12.2, causing nominal
+  `#private` type errors — re-link
+  `node_modules/.bun/@zag-js+date-{input,picker,utils}*/…/@internationalized/date`
+  to 3.12.2 after every install (node_modules-only).
 - bun does not resolve transitive deps for some deep file:-linked packages:
   `@zag-js/popper`'s `@floating-ui/*` (and dom-query/utils) can be missing
   from its .bun instance, breaking typecheck for popper consumers
@@ -293,6 +298,29 @@ SSR-serialize-then-resume round trip the value deserializes as `undefined`;
 consumers must re-provide it client-side (same category as the R9 plain-
 callback CSR caveat).
 
+### R17. Machine-derived attributes ONLY via the mergeProps spread
+
+An explicit JSX attribute expression reading the api
+(`hidden={api.view !== view}`) compiles to an optimizer attribute-signal that
+captures the stale noSerialize api — the attribute freezes while sibling
+parts keep re-rendering. Deliver every machine-derived attribute through the
+spread of `api.getXProps()` / mergeProps output, never as a standalone JSX
+attribute expression. (Same family as R10/R13; found via DatePicker views.)
+
+### R18. Deep reads through the api store retain data in Qwik's serialization graph
+
+A part merely reading `api.weekDays.length` crashed SSR with Q20: arrays/
+objects read through the R2 store are retained by Qwik's serializer, and any
+class instance reachable from them (DateValue, Color) then fails. `untrack()`
+does NOT help; `noSerialize()`-tagging the nested instances does. Centralize
+the tagging in the component's context accessor (see
+`useDatePickerContext`/`useColorPickerContext`), and remember R15 extends to
+CONTEXT VALUES too: `useContextProvider` verify-serializes eagerly, so
+prop-derived context objects carrying class instances need tagging as well.
+Serializers for machine-context classes live in `src/serializers.ts`
+(ark.date, ark.date-incomplete, ark.color), imported for side effect by the
+consuming use-* hooks.
+
 ### R16. Interactive fixtures live in tests/basic.tsx, never in *.browser.test.tsx
 
 A `component$` handler closing over module scope compiles its lazy QRL
@@ -467,7 +495,9 @@ being ported need them (checkbox does not).
    (+ ✅ collection helper); ✅ Combobox; remaining: Cascade Select
 8. ✅ Tags Input, ✅ Pagination, ✅ Password Input; remaining: File Upload,
    Signature Pad, Scroll Area, Marquee
-9. Date Input, Date Picker, Color Picker — need
+9. ✅ Date Input, ✅ Date Picker, ✅ Color Picker (+ ✅ locale utils
+   useCollator/useDateFormatter/useFilter) — serializers registered and
+   SSR-verified; previously documented as: need
    `registerValueSerializer` from `@zag-js/qwik` for `DateValue`/`Color`
    SSR-resume; register in the provider layer and document that apps must
    import it
