@@ -15,7 +15,12 @@ established **empirically** (by running tests, not by reading docs) — do not
 `@ark-ui/react|solid|vue|svelte` (~60 headless components over Zag.js state
 machines), built on the **`@zag-js/qwik`** framework adapter.
 
-**Status: Phase 0 (architecture spike) COMPLETE and verified.**
+**Status: COMPONENT SURFACE COMPLETE — 60 component directories, 293 headless
+tests + browser interaction suites, every commit individually gated
+(typecheck / lint / headless / browser). Remaining work: infrastructure steps
+I2 (library build), I4 (EnvironmentProvider SSR), I5 (asChild), I6
+(interaction provider); website wiring (Phase 4); upstream filings; and the
+zag-adapter fixes listed in Part 5 #0–#0c (pending maintainer sign-off).**
 
 | Concern | Status |
 | --- | --- |
@@ -321,6 +326,20 @@ Serializers for machine-context classes live in `src/serializers.ts`
 (ark.date, ark.date-incomplete, ark.color), imported for side effect by the
 consuming use-* hooks.
 
+### R19. Qwik projects `<Slot/>` only once per component render
+
+A second `<Slot/>` in the same render outputs nothing (minimal repro
+verified). For repeat-content components (Marquee's seamless-loop clones),
+give the single real copy the Slot and mirror its DOM into aria-hidden clones
+with a client-only MutationObserver (see `marquee-content.tsx`).
+
+### R20. Plain closures captured inside `$()` fail real SSR verification
+
+The disabled `useQwikValidLexicalScope` biome rule does NOT make arbitrary
+captures safe: a plain (non-QRL) function closed over inside a `$()` handler
+crashes SSR with Q3. Functions that handlers need must themselves be QRLs
+capturing only primitives/QRL-safe values (see `use-download.ts`).
+
 ### R16. Interactive fixtures live in tests/basic.tsx, never in *.browser.test.tsx
 
 A `component$` handler closing over module scope compiles its lazy QRL
@@ -493,8 +512,8 @@ being ported need them (checkbox does not).
 7. ✅ Menu (nested-menu wiring architecturally done; interactive nested browser
    test dropped as flaky pending Part 5 #0 adapter fix), ✅ Select, ✅ Listbox
    (+ ✅ collection helper); ✅ Combobox; remaining: Cascade Select
-8. ✅ Tags Input, ✅ Pagination, ✅ Password Input; remaining: File Upload,
-   Signature Pad, Scroll Area, Marquee
+8. ✅ Tags Input, Pagination, Password Input, File Upload, Signature Pad,
+   Scroll Area, Marquee
 9. ✅ Date Input, ✅ Date Picker, ✅ Color Picker (+ ✅ locale utils
    useCollator/useDateFormatter/useFilter) — serializers registered and
    SSR-verified; previously documented as: need
@@ -502,10 +521,12 @@ being ported need them (checkbox does not).
    SSR-resume; register in the provider layer and document that apps must
    import it
 10. ✅ Tree View, ✅ Navigation Menu, ✅ Cascade Select (designed from the zag
-    machine directly), ✅ Toast (group store; `Toaster` takes a `renderToast`
-    prop — component$ children-as-function types collapse to never, the one
-    API-shape deviation), ✅ Tour, ✅ Drawer (stack registry bridged via
-    serializable counter), ✅ Floating Panel; remaining:
+    machine directly), ✅ Toast, ✅ Tour, ✅ Drawer, ✅ Floating Panel,
+    ✅ Carousel, ✅ Image Cropper, ✅ Frame (children render in the main
+    document, not the iframe — documented gap: no cross-document portal /
+    event delegation in Qwik), ✅ Client-Only, ✅ Download Trigger,
+    ✅ Highlight, ✅ Format, ✅ JSON Tree View (renderValue callback omitted —
+    documented gap), ✅ Focus Trap. DONE:
     Navigation Menu, Carousel, Pagination, Image Cropper, Drawer, Frame,
     Client-Only, Download Trigger, JSON Tree View
 11. Collection helpers (`createListCollection` etc. — mostly re-exports)
