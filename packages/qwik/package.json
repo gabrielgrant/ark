@@ -84,6 +84,7 @@
     "@zag-js/rating-group": "1.41.2",
     "@zag-js/remove-scroll": "1.41.2",
     "@zag-js/select": "1.41.2",
+    "@zag-js/signature-pad": "1.41.2",
     "@zag-js/slider": "1.41.2",
     "@zag-js/splitter": "1.41.2",
     "@zag-js/steps": "1.41.2",
