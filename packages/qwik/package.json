@@ -45,6 +45,7 @@
     "@zag-js/angle-slider": "1.41.2",
     "@zag-js/aria-hidden": "1.41.2",
     "@zag-js/avatar": "1.41.2",
+    "@zag-js/carousel": "1.41.2",
     "@zag-js/cascade-select": "1.41.2",
     "@zag-js/checkbox": "1.41.2",
     "@zag-js/clipboard": "1.41.2",

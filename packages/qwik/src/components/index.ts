@@ -1,6 +1,7 @@
 export * from './accordion/index.ts'
 export * from './angle-slider/index.ts'
 export * from './avatar/index.ts'
+export * from './carousel/index.ts'
 export * from './cascade-select/index.ts'
 export * from './checkbox/index.ts'
 export * from './clipboard/index.ts'
