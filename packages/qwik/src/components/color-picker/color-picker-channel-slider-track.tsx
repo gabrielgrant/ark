@@ -1,0 +1,24 @@
+import { mergeProps } from '@zag-js/qwik'
+import { Slot, component$ } from '@qwik.dev/core'
+import { type HTMLProps, type PolymorphicProps, ark } from '../factory.tsx'
+import { useColorPickerChannelPropsContext } from './use-color-picker-channel-props-context.ts'
+import { useColorPickerContext } from './use-color-picker-context.ts'
+import { useColorPickerFormatPropsContext } from './use-color-picker-format-context.ts'
+
+export interface ColorPickerChannelSliderTrackBaseProps extends PolymorphicProps<'div'> {}
+export interface ColorPickerChannelSliderTrackProps extends HTMLProps<'div'>, ColorPickerChannelSliderTrackBaseProps {}
+
+export const ColorPickerChannelSliderTrack = component$<ColorPickerChannelSliderTrackProps>((props) => {
+  const api = useColorPickerContext()
+  const formatProps = useColorPickerFormatPropsContext()
+  const channelProps = useColorPickerChannelPropsContext()
+  const channelSliderProps = { ...channelProps, ...formatProps }
+
+  const trackProps = api ? mergeProps(api.getChannelSliderTrackProps(channelSliderProps), props) : props
+
+  return (
+    <ark.div {...trackProps}>
+      <Slot />
+    </ark.div>
+  )
+})

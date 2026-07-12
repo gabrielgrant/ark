@@ -9,6 +9,7 @@ import {
   parseDateTime,
   parseZonedDateTime,
 } from '@internationalized/date'
+import { Color, parseColor } from '@zag-js/color-utils'
 import { IncompleteDate } from '@zag-js/date-input'
 import { registerValueSerializer } from '@zag-js/qwik'
 
@@ -120,4 +121,20 @@ registerValueSerializer({
     instance.offset = data.offset
     return instance
   },
+})
+
+/**
+ * `@zag-js/color-utils` `Color` (concrete subclasses `RGBColor`/`HSBColor`/
+ * `HSLColor`) -- color-picker's machine context `value` bindable. Encoding via
+ * `toString(getFormat())` keeps the concrete subclass AND the alpha channel on
+ * the wire (e.g. `"hsba(200, 50%, 50%, 0.5)"`); `parseColor` dispatches back
+ * to the right subclass from the string prefix. Registered here (imported for
+ * side effect by `use-color-picker.ts`) for the same SSR-resumability reason
+ * as `ark.date` above.
+ */
+registerValueSerializer({
+  id: 'ark.color',
+  match: (v): v is Color => v instanceof Color,
+  encode: (v) => v.toString(v.getFormat()),
+  decode: (data: string) => parseColor(data),
 })

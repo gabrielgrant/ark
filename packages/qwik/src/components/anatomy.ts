@@ -6,6 +6,7 @@ export { cascadeSelectAnatomy } from './cascade-select/cascade-select.anatomy.ts
 export { checkboxAnatomy } from './checkbox/checkbox.anatomy.ts'
 export { clipboardAnatomy } from './clipboard/clipboard.anatomy.ts'
 export { collapsibleAnatomy } from './collapsible/collapsible.anatomy.ts'
+export { colorPickerAnatomy } from './color-picker/color-picker.anatomy.ts'
 export { comboboxAnatomy } from './combobox/combobox.anatomy.ts'
 export { dateInputAnatomy } from './date-input/date-input.anatomy.ts'
 export { datePickerAnatomy } from './date-picker/date-picker.anatomy.ts'
