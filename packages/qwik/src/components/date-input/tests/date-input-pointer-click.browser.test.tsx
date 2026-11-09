@@ -1,6 +1,6 @@
 import { userEvent } from '@vitest/browser/context'
 import { expect, it } from 'vitest'
-import { render } from 'vitest-browser-qwik'
+import { renderReady } from '../../../tests/render-ready.ts'
 import { ComponentUnderTest } from './basic.tsx'
 
 /**
@@ -8,13 +8,11 @@ import { ComponentUnderTest } from './basic.tsx'
  * Qwik 2.0.0-rc.4): this scenario was blocked by a documented adapter issue
  * (PLAN.md Part 5 #0 family) on the previous branch and now passes.
  *
- * Kept in its own single-test file on purpose: it must run as the page's
- * FIRST render() -- second and later containers run with Qwik rc.4's broken
- * event dispatch (see src/qwik-regressions/) which re-breaks pointer
- * semantics for reasons unrelated to the adapter.
+ * Uses `renderReady()` so dispatch is synchronous no matter where this test
+ * runs (see src/qwik-regressions/dispatch-after-render.browser.test.tsx).
  */
 it('focuses a segment on a real Playwright pointer click', async () => {
-  const screen = await render(<ComponentUnderTest name="date" />)
+  const screen = await renderReady(<ComponentUnderTest name="date" />)
   const root = screen.container as HTMLElement
   const segment = root.querySelectorAll('[role="spinbutton"]')[0] as HTMLElement
   await screen.getByRole('spinbutton').nth(0).click()

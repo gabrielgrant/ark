@@ -596,14 +596,14 @@ broken, that is a Zag-adapter fix — discuss before changing zag.
    `tree-view/tests/tree-view-pointer-click.browser.test.tsx` (also
    date-input contentEditable segment focus,
    `date-input/tests/date-input-pointer-click.browser.test.tsx`).
-   The native `element.click()` workarounds in older multi-test files are
-   still needed, but ONLY because of the new Qwik issue #0q below (second
-   and later containers on a page), not the adapter.
+   The native `element.click()` workarounds in older multi-test files
+   predate the #0q diagnosis below and may no longer be needed (not
+   re-checked).
 
 0c. **RESOLVED (rebased adapter branch): rAF render-gate livelocks.** Toast
    show→dismiss and the full tour flow pass end to end; both suites are
-   re-enabled (toast's interactive test must stay its file's first render,
-   see #0q). Tour additionally needed fixture fixes that only matter in a
+   re-enabled (toast's interactive test must stay its file's first render
+   for a separate, unexplained reason, see #0q). Tour additionally needed fixture fixes that only matter in a
    real browser: backdrop before positioner in DOM order, and the consumer
    CSS stacking/centering zag ships in its shared tour.css.
 
@@ -612,17 +612,26 @@ broken, that is a Zag-adapter fix — discuss before changing zag.
    (`slider/tests/slider-pointer-drag.browser.test.tsx`); the ~250ms settle
    before unmount for drawer/floating-panel is still in place.
 
-0q. **NEW — Qwik core 2.0.0-rc.4 regression: second-container event
-   dispatch.** The second and every later client `render()` into one
-   document loses synchronous element dispatch: handlers run async after
-   native propagation, so `stopPropagation()` in a child handler cannot
-   shield an ancestor's handler (tree-view trigger/control double-toggle)
-   and conditional `preventDefault` cannot work. Verified correct on
-   2.0.0-beta.36 by swapping only @qwik.dev/core; no zag involved. MCVE +
-   full notes: `src/qwik-regressions/second-container-event-dispatch.browser.test.tsx`.
-   Practical rule: any browser test whose semantics depend on synchronous
-   dispatch must be its FILE'S FIRST `render()`. Candidate for an upstream
-   QwikDev/qwik report.
+0q. **Qwik core regression since 2.0.0-beta.38: dispatch right after
+   `render()`.** (Earlier described as a "second container" bug; that was
+   wrong.) Until Qwik finishes setting up a newly rendered container, it
+   runs event handlers only after native propagation, so
+   `stopPropagation()` in a child handler cannot shield an ancestor's
+   handler (tree-view trigger/control double-toggle) and `preventDefault`
+   comes too late. `render()` resolves before that setup is done unless it
+   had to load component code, which is why a file's first render usually
+   passed. The readiness flag is document-wide, so a new mount also affects
+   containers that were already settled. Present in beta.38 through rc.5;
+   beta.37 is correct. No zag involved. Upstream repro:
+   https://github.com/gabrielgrant/qwik-repro-dispatch-after-render.
+   Practical rule: tests that depend on synchronous dispatch use
+   `renderReady()` (`src/tests/render-ready.ts`), which awaits
+   `_whenContainerDataReady` after `render()`. Notes and the raw-render
+   regression test: `src/qwik-regressions/dispatch-after-render.browser.test.tsx`.
+   Toast's interactive test still has to be its file's first render, but
+   for a different reason: run second, the click is delivered and the toast
+   reaches the shared module-level toaster, yet no `<Toaster>` renders it.
+   `renderReady()` does not help. Cause not yet known.
 
 1. **Wake path under streaming SSR with many machines** — test written
    (`checkbox-ssr.browser.test.tsx`), still SKIPPED but the failure moved:

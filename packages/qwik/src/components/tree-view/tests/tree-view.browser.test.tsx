@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { render } from 'vitest-browser-qwik'
+import { renderReady } from '../../../tests/render-ready.ts'
 import { ComponentUnderTest } from './basic.tsx'
 
 const branchExpanded = (root: HTMLElement, id: string) =>
@@ -26,7 +26,7 @@ const itemSelected = (root: HTMLElement, id: string) =>
 const click = (el: Element | null) => (el as HTMLElement).click()
 
 it('expands a branch on trigger click', async () => {
-  const screen = await render(<ComponentUnderTest />)
+  const screen = await renderReady(<ComponentUnderTest />)
   const root = screen.container as HTMLElement
 
   expect(branchExpanded(root, 'node_modules')).toBe('false')
@@ -39,7 +39,7 @@ it('expands a branch on trigger click', async () => {
 })
 
 it('selects an item on click', async () => {
-  const screen = await render(<ComponentUnderTest />)
+  const screen = await renderReady(<ComponentUnderTest />)
   const root = screen.container as HTMLElement
 
   expect(itemSelected(root, 'package.json')).toBe('false')
@@ -49,20 +49,14 @@ it('selects an item on click', async () => {
 })
 
 /**
- * Skipped on @qwik.dev/core 2.0.0-rc.4: this file's third `render()` runs
- * with the core's broken second-container event dispatch (handlers run
- * async, after native propagation), so the branch trigger's
- * `stopPropagation()` no longer shields the branch-control handler — one
- * click sends BRANCH_TOGGLE.CLICK *and* BRANCH_NODE.CLICK and the branch
- * toggles twice (verified: `onExpandedChange` logs
- * `["node_modules"]` then `[]` for one trusted click). Passes when run as
- * the file's first test. Qwik core regression (beta.36 was correct), not
- * the zag adapter: see
- * `src/qwik-regressions/second-container-event-dispatch.browser.test.tsx`
- * and un-skip together with it.
+ * Depends on synchronous dispatch: the branch trigger's `stopPropagation()`
+ * must keep the click from also reaching the branch-control handler,
+ * otherwise one click toggles the branch twice. `renderReady()` waits for
+ * the container to be ready so that holds (see
+ * `src/qwik-regressions/dispatch-after-render.browser.test.tsx`).
  */
-it.skip('shows nested items after expanding a branch', async () => {
-  const screen = await render(<ComponentUnderTest />)
+it('shows nested items after expanding a branch', async () => {
+  const screen = await renderReady(<ComponentUnderTest />)
   const root = screen.container as HTMLElement
 
   expect(root.querySelector('[data-testid="branch-content-node_modules"]')?.hasAttribute('hidden')).toBe(true)

@@ -20,11 +20,12 @@ const toastRoot = (screen: { container: Element }) =>
  * show -> dismiss cycle passes with no post-test hang.
  *
  * Ordering constraint: this interactive test must be the FILE'S FIRST
- * `render()` — the second and later client containers on a page run with
- * Qwik rc.4's broken second-container event dispatch (see
- * `src/qwik-regressions/second-container-event-dispatch.browser.test.tsx`),
- * under which the show click is not delivered. The static region assertion
- * below is dispatch-free, so it tolerates running second.
+ * `render()`. Run after another `render()` of the fixture, the click is
+ * delivered and `toaster.create()` adds the toast to the shared module-level
+ * toaster, but no `<Toaster>` renders it. This is not the Qwik dispatch
+ * regression (`renderReady()` does not help); the cause is not yet known
+ * (PLAN.md Part 5 #0q). The static region assertion below tolerates running
+ * second.
  */
 it('shows a toast from a trigger click and dismisses it via the close trigger', async () => {
   const screen = await render(<ComponentUnderTest />)
