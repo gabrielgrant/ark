@@ -10,7 +10,7 @@ import { testSSR } from 'vitest-browser-qwik/ssr-plugin'
 // Use a pre-installed Chromium when present (e.g. sandboxes where Playwright's
 // browser download is blocked); otherwise fall back to Playwright's managed
 // browser so the config stays portable.
-const presetChromium = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+const presetChromium = '/opt/pw-browsers/chromium'
 const launchOptions = existsSync(presetChromium)
   ? { executablePath: presetChromium, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
   : {}
