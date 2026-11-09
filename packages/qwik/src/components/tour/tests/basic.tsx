@@ -37,8 +37,20 @@ const TourStarter = component$(() => {
 export const ComponentUnderTest = () => (
   <Tour.Root steps={steps}>
     <TourStarter />
+    {/* fixed, z-auto layers stack by DOM order: backdrop must precede the
+        positioner or it paints above the dialog content (matches zag's own
+        example and ark-react's story order) */}
+    <Tour.Backdrop data-testid="backdrop" />
     <Tour.Positioner>
-      <Tour.Content data-testid="content">
+      {/* tour is headless: stacking + dialog centering live in consumer CSS
+          (zag ships them in its shared tour.css as
+          `z-index: calc(var(--tour-layer) + var(--tour-z-index))`). Without
+          this, the fixed backdrop paints above the content and intercepts
+          every pointer click in a real browser. */}
+      <Tour.Content
+        data-testid="content"
+        style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: '102' }}
+      >
         <Tour.Title data-testid="title" />
         <Tour.Description data-testid="description" />
         <Tour.ProgressText data-testid="progress" />
@@ -47,6 +59,5 @@ export const ComponentUnderTest = () => (
         <Tour.CloseTrigger data-testid="close">Close</Tour.CloseTrigger>
       </Tour.Content>
     </Tour.Positioner>
-    <Tour.Backdrop data-testid="backdrop" />
   </Tour.Root>
 )

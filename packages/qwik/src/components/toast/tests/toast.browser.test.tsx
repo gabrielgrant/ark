@@ -11,54 +11,22 @@ const toastRoot = (screen: { container: Element }) =>
  * this component meaningfully (PLAN.md R5): toasts are created imperatively
  * from a client event handler, so a server render always shows an empty
  * group.
- */
-it('reflects toast group region attributes', async () => {
-  const screen = await render(<ComponentUnderTest />)
-  const region = screen.getByRole('region')
-
-  await expect.element(region).toHaveAttribute('data-placement', 'bottom')
-  await expect.element(region).toHaveAttribute('aria-live', 'polite')
-  expect(toastRoot(screen)).toBeFalsy()
-})
-
-/**
- * BLOCKED — not a defect in this port's Root/Actor/parts wiring. The
- * group/actor architecture is verified correct by direct DOM inspection
- * (manual probe: clicking the trigger DOES synchronously produce the right
- * markup — `data-part="root"`, title/description text, close-trigger button,
- * all present with correct machine-derived attrs, confirmed via
- * `element.innerHTML` immediately after the click). What's blocked is this
- * *test harness* completing afterward:
  *
- * Any zag toast-machine transition that starts a `requestAnimationFrame`-based
- * effect AFTER the initial render — `waitForDuration`/`waitForRemoveDelay`
- * (both use `setRafTimeout`, a `Timer` that self-reschedules via rAF every
- * frame until it elapses — confirmed via source read,
- * `zag/packages/utilities/core/src/timers.ts`), or even the plain `raf()`
- * calls in `setMounted`/`trackHeight` (`zag/packages/machines/toast/src/toast.machine.ts`)
- * — races with the Qwik zag adapter's `installRafRenderGate()`
- * (`zag/packages/frameworks/qwik/src/machine.ts`), which globally wraps
- * `requestAnimationFrame` to defer callbacks while a Qwik render is in
- * flight. Bisected empirically (manual `console.log` probes placed
- * immediately after each step, run outside this test file per R16):
- *   - render only, no toast created            -> fine, fast
- *   - `type: 'loading'` (skips duration timer), click show, no dismiss
- *     -> fast in isolation, but NOT reliably (reproduced hanging too;
- *     genuinely racy, not deterministic)
- *   - any dismiss — via the close-trigger button OR `toaster.dismiss(id)`
- *     called directly on the store, bypassing the DOM/click entirely
- *     -> hangs every time
- * In every hanging case the test's own assertions had already completed
- * (proven via a `console.log` placed right after the click); it is the
- * harness's post-test screenshot/cleanup step that then times out, and the
- * browser tab becomes unresponsive for the rest of the run. This is the same
- * family as PLAN.md Part 5 #0/#0b (documented zag-adapter effect/rAF timing
- * issues found while porting other components) — out of scope to fix here
- * (the zag repo is read-only reference; do not edit without maintainer
- * sign-off). Both interactive assertions are skipped rather than shipped as
- * flaky-red; re-enable once the adapter fix lands.
+ * Previously skipped: on the pre-rc.4 adapter branch, any toast transition
+ * that started rAF-based machine work (`setRafTimeout` duration timers,
+ * dismiss) deadlocked against the adapter's `installRafRenderGate`, hanging
+ * the tab after the test body finished. FIXED by the rebased adapter
+ * (@zag-js/qwik 1.42.0 / Qwik 2.0.0-rc.4 branch): the full
+ * show -> dismiss cycle passes with no post-test hang.
+ *
+ * Ordering constraint: this interactive test must be the FILE'S FIRST
+ * `render()` — the second and later client containers on a page run with
+ * Qwik rc.4's broken second-container event dispatch (see
+ * `src/qwik-regressions/second-container-event-dispatch.browser.test.tsx`),
+ * under which the show click is not delivered. The static region assertion
+ * below is dispatch-free, so it tolerates running second.
  */
-it.skip('shows a toast from a trigger click and dismisses it via the close trigger', async () => {
+it('shows a toast from a trigger click and dismisses it via the close trigger', async () => {
   const screen = await render(<ComponentUnderTest />)
 
   await screen.getByTestId('show-toast').click()
@@ -68,4 +36,13 @@ it.skip('shows a toast from a trigger click and dismisses it via the close trigg
 
   await screen.getByTestId('toast-close').click()
   await expect.poll(() => toastRoot(screen)).toBeFalsy()
+})
+
+it('reflects toast group region attributes', async () => {
+  const screen = await render(<ComponentUnderTest />)
+  const region = screen.getByRole('region')
+
+  await expect.element(region).toHaveAttribute('data-placement', 'bottom')
+  await expect.element(region).toHaveAttribute('aria-live', 'polite')
+  expect(toastRoot(screen)).toBeFalsy()
 })
