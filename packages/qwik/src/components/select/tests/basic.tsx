@@ -1,3 +1,4 @@
+import { component$, useSignal } from '@qwik.dev/core'
 import { Select, createListCollection } from '../index.ts'
 
 interface Framework {
@@ -37,3 +38,32 @@ export const ComponentUnderTest = (props: Omit<Select.RootProps<Framework>, 'col
     <Select.HiddenSelect data-testid="hidden-select" />
   </Select.Root>
 )
+
+export const PositionRerenderFixture = component$(() => {
+  const tick = useSignal(0)
+  const positionerRef = useSignal<Element>()
+  return (
+    <div>
+      <button type="button" data-testid="rerender" onClick$={() => tick.value++}>
+        rerender
+      </button>
+      <span data-testid="ref-tag">{positionerRef.value ? 'positioner' : 'none'}</span>
+      <Select.Root collection={collection} defaultOpen>
+        <Select.Control data-testid="control">
+          <Select.Trigger data-testid="trigger">
+            <Select.ValueText data-testid="value-text" placeholder="Select a framework" />
+          </Select.Trigger>
+        </Select.Control>
+        <Select.Positioner data-testid="positioner" ref={positionerRef} style={{ outlineWidth: `${tick.value}px` }}>
+          <Select.Content data-testid="content">
+            {collection.items.map((item) => (
+              <Select.Item key={item.value} item={item}>
+                <Select.ItemText>{item.label}</Select.ItemText>
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select.Positioner>
+      </Select.Root>
+    </div>
+  )
+})

@@ -97,3 +97,30 @@ export const FilterableCombobox = component$(() => {
     </Combobox.Root>
   )
 })
+
+export const PositionRerenderFixture = component$(() => {
+  const tick = useSignal(0)
+  const positionerRef = useSignal<Element>()
+  return (
+    <div>
+      <button type="button" data-testid="rerender" onClick$={() => tick.value++}>
+        rerender
+      </button>
+      <span data-testid="ref-tag">{positionerRef.value ? 'positioner' : 'none'}</span>
+      <Combobox.Root collection={collection} defaultOpen>
+        <Combobox.Control data-testid="control">
+          <Combobox.Input data-testid="input" />
+        </Combobox.Control>
+        <Combobox.Positioner data-testid="positioner" ref={positionerRef} style={{ outlineWidth: `${tick.value}px` }}>
+          <Combobox.Content data-testid="content">
+            {collection.items.map((item) => (
+              <Combobox.Item key={item.value} item={item}>
+                <Combobox.ItemText>{item.label}</Combobox.ItemText>
+              </Combobox.Item>
+            ))}
+          </Combobox.Content>
+        </Combobox.Positioner>
+      </Combobox.Root>
+    </div>
+  )
+})

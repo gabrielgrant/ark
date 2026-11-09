@@ -1,4 +1,4 @@
-import { component$ } from '@qwik.dev/core'
+import { component$, useSignal } from '@qwik.dev/core'
 import { CascadeSelect, createTreeCollection } from '../index.ts'
 import { useCascadeSelectItemContext } from '../use-cascade-select-item-context.ts'
 
@@ -115,3 +115,26 @@ export const ComponentUnderTest = (props: Omit<CascadeSelect.RootProps<Node>, 'c
     <CascadeSelect.HiddenInput data-testid="hidden-input" />
   </CascadeSelect.Root>
 )
+
+export const PositionRerenderFixture = component$(() => {
+  const tick = useSignal(0)
+  const positionerRef = useSignal<Element>()
+  return (
+    <div>
+      <button type="button" data-testid="rerender" onClick$={() => tick.value++}>
+        rerender
+      </button>
+      <span data-testid="ref-tag">{positionerRef.value ? 'positioner' : 'none'}</span>
+      <CascadeSelect.Root collection={collection} defaultOpen>
+        <CascadeSelect.Control data-testid="control">
+          <CascadeSelect.Trigger data-testid="trigger">
+            <CascadeSelect.ValueText data-testid="value-text" placeholder="Select" />
+          </CascadeSelect.Trigger>
+        </CascadeSelect.Control>
+        <CascadeSelect.Positioner data-testid="positioner" ref={positionerRef} style={{ outlineWidth: `${tick.value}px` }}>
+          <CascadeSelect.Content data-testid="content">cascade content</CascadeSelect.Content>
+        </CascadeSelect.Positioner>
+      </CascadeSelect.Root>
+    </div>
+  )
+})
