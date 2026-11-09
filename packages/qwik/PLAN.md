@@ -136,7 +136,7 @@ serialized at SSR and resumed later). The working pattern (see
 ```tsx
 // Root (the machine owner) — component$
 const api = checkbox.connect(useMachine(machine, () => machineProps), normalizeProps)
-const store = useStore<XApiStore>({ api: noSerialize(api) })
+const store = useStore<XApiStore>({ api: noSerialize(api) }, { deep: false })   // R21
 store.api = noSerialize(api)      // rewrite EVERY render so subscribers update
 XProvider(store)                  // context carries the (serializable) store
 
@@ -155,6 +155,8 @@ const partProps = api ? mergeProps(api.getPartProps(), props) : props
 - Reading `api.getXProps()` during a part's render also subscribes the part to
   the underlying Zag bindable signals — verified: `data-state` updates on
   parts when the machine transitions.
+- The store MUST be shallow (`{ deep: false }`, see R21). In practice use
+  `useApiStore` from `src/utils/use-api-store.ts`, which does this.
 
 ### R3. Context defaults must be serializable; use the sentinel in `create-context.ts`
 
@@ -322,6 +324,12 @@ Serializers for machine-context classes live in `src/serializers.ts`
 (ark.date, ark.date-incomplete, ark.color), imported for side effect by the
 consuming use-* hooks.
 
+Root cause (found later, see R21): the api store used to be a deep store, so
+every object read through `store.api` was wrapped in a nested store and kept
+in the serialized state. With the shallow store reads return the raw objects
+and nothing nested is retained. The tagging above is now belt-and-braces;
+keep it until it is shown to be unneeded for each component.
+
 ### R19. Qwik projects `<Slot/>` only once per component render
 
 A second `<Slot/>` in the same render outputs nothing (minimal repro
@@ -335,6 +343,31 @@ The disabled `useQwikValidLexicalScope` biome rule does NOT make arbitrary
 captures safe: a plain (non-QRL) function closed over inside a `$()` handler
 crashes SSR with Q3. Functions that handlers need must themselves be QRLs
 capturing only primitives/QRL-safe values (see `use-download.ts`).
+
+### R21. Never hold a `noSerialize` object in a deep store
+
+`useStore` is deep by default. When a component reads an object property of
+a deep store during render, Qwik wraps that object in a nested store and
+records subscriptions on it, even if the object is marked `noSerialize`. At
+SSR pause the serializer keeps that nested store but writes its target (the
+`noSerialize` object) as `undefined`. On resume Qwik rebuilds the nested store
+with `getOrCreateStore(undefined)`, which throws `TypeError: Cannot convert
+undefined or null to object`, and the state that owns it never resumes. CSR is
+unaffected, which is why browser `render()` tests never showed it.
+
+This broke every machine-backed component over real SSR + resume: the R2 api
+store was deep, so parts reading `store.api.getXProps()` created a nested store
+around the `noSerialize`'d api. Fix: `useStore(..., { deep: false })` in
+`useApiStore`. Subscriptions are unchanged where it matters: parts track the
+top-level `api` property, which the owner rewrites every render.
+
+Guarded by `src/tests/ssr-resume.test.tsx`: it SSR-renders every
+`tests/basic.tsx` fixture and deserializes every state root through the
+returned `DomContainer`, the same path the browser takes on resume. Without
+the fix 48 of 55 fixtures fail; with it all pass. Any new `noSerialize` value
+held in a store needs `{ deep: false }` or a signal (`useSignal(noSerialize(x))`).
+This is also a Qwik bug (the deep-store `get` trap ignores `noSerialize`);
+reported upstream, but do not rely on a Qwik fix.
 
 ### R16. Interactive fixtures live in tests/basic.tsx, never in *.browser.test.tsx
 
@@ -603,6 +636,10 @@ broken, that is a Zag-adapter fix — discuss before changing zag.
    replaced by the activation render before replay. Adapter-side
    investigation needed; zag's own e2e-qwik app remains the authoritative
    wake-path coverage.
+   Partial coverage now: `src/tests/ssr-resume.test.tsx` checks headlessly
+   that every fixture's SSR state deserializes on resume (R21), which is
+   where the real-SSR wake failure actually was. It does not exercise
+   event delivery after resume, so this browser test is still wanted.
 
 2. **EnvironmentProvider custom value over SSR** (I4).
 3. **`asChild`** (I5) — API-parity gap to document if dropped.
