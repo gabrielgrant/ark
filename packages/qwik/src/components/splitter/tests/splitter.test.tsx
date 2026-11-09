@@ -23,7 +23,7 @@ describe('Splitter', () => {
 
     const trigger = document.querySelector('[data-testid="resize-trigger"]')
     expect(trigger?.getAttribute('role')).toBe('separator')
-    expect(trigger?.getAttribute('aria-orientation')).toBe('horizontal')
+    expect(trigger?.getAttribute('aria-orientation')).toBe('vertical')
     expect(trigger?.getAttribute('tabindex')).toBe('0')
   })
 

@@ -39,7 +39,7 @@
   },
   "sideEffects": false,
   "dependencies": {
-    "@internationalized/date": "3.12.2",
+    "@internationalized/date": "3.12.4",
     "@zag-js/accordion": "1.41.2",
     "@zag-js/anatomy": "1.41.2",
     "@zag-js/angle-slider": "1.41.2",
@@ -84,7 +84,7 @@
     "@zag-js/presence": "1.41.2",
     "@zag-js/progress": "1.41.2",
     "@zag-js/qr-code": "1.41.2",
-    "@zag-js/qwik": "1.31.1",
+    "@zag-js/qwik": "1.42.0",
     "@zag-js/radio-group": "1.41.2",
     "@zag-js/rating-group": "1.41.2",
     "@zag-js/remove-scroll": "1.41.2",
@@ -109,10 +109,10 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
-    "@qwik.dev/core": "2.0.0-beta.36",
+    "@qwik.dev/core": "2.0.0-rc.4",
     "clean-package": "2.2.0",
     "typescript": "6.0.3",
-    "vite": "8.0.16",
+    "vite": "8.3.5",
     "vitest": "4.1.8",
     "@vitest/browser": "4.1.8",
     "playwright": "1.58.0",
@@ -120,7 +120,7 @@
     "vitest-browser-qwik": "0.3.8"
   },
   "peerDependencies": {
-    "@qwik.dev/core": ">=2.0.0-beta.0"
+    "@qwik.dev/core": ">=2.0.0-rc.4"
   },
   "clean-package": "../../clean-package.config.json"
 }

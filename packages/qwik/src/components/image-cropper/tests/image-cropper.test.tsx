@@ -48,11 +48,11 @@ describe('ImageCropper', () => {
     expect(selection?.hasAttribute('aria-valuenow')).toBe(true)
   })
 
-  it('disables the viewport and selection tabIndex when fixedCropArea is set', async () => {
+  it('disables the viewport but keeps the selection focusable when fixedCropArea is set', async () => {
     const { document } = await ssrRenderToDom(<ComponentUnderTest fixedCropArea />, { qwikLoader: true })
 
     expect(document.querySelector('[data-testid="viewport"]')?.hasAttribute('data-disabled')).toBe(true)
-    expect(document.querySelector('[data-testid="selection"]')?.hasAttribute('tabindex')).toBe(false)
+    expect(document.querySelector('[data-testid="selection"]')?.getAttribute('tabindex')).toBe('0')
   })
 
   it('serializes QRL callback props through SSR', async () => {

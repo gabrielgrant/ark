@@ -11,7 +11,8 @@ describe('PasswordInput', () => {
     expect(input?.getAttribute('type')).toBe('password')
 
     const trigger = document.querySelector('[data-testid="visibility-trigger"]')
-    expect(trigger?.getAttribute('aria-expanded')).toBe('false')
+    expect(trigger).toBeTruthy()
+    expect(trigger?.hasAttribute('aria-expanded')).toBe(false)
   })
 
   it('renders the input as type text when defaultVisible is set', async () => {

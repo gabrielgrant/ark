@@ -42,8 +42,8 @@ registerValueSerializer({
   id: 'ark.date',
   match: (v): v is DateValue =>
     v instanceof CalendarDate || v instanceof CalendarDateTime || v instanceof ZonedDateTime,
-  encode: (v) => v.toString(),
-  decode: (data: string) => {
+  serialize: (v) => v.toString(),
+  deserialize: (data: string) => {
     if (data.includes('[')) return parseZonedDateTime(data)
     if (data.includes('T')) return parseDateTime(data)
     return parseDate(data)
@@ -93,7 +93,7 @@ interface EncodedIncompleteDate {
 registerValueSerializer({
   id: 'ark.date-incomplete',
   match: (v): v is IncompleteDate => v instanceof IncompleteDate,
-  encode: (v): EncodedIncompleteDate => ({
+  serialize: (v): EncodedIncompleteDate => ({
     calendar: v.calendar.identifier,
     hourCycle: v.hourCycle,
     era: v.era,
@@ -107,7 +107,7 @@ registerValueSerializer({
     millisecond: v.millisecond,
     offset: v.offset,
   }),
-  decode: (data: EncodedIncompleteDate) => {
+  deserialize: (data: EncodedIncompleteDate) => {
     const instance = new IncompleteDate(createCalendar(data.calendar), data.hourCycle)
     instance.era = data.era
     instance.year = data.year
@@ -135,6 +135,6 @@ registerValueSerializer({
 registerValueSerializer({
   id: 'ark.color',
   match: (v): v is Color => v instanceof Color,
-  encode: (v) => v.toString(v.getFormat()),
-  decode: (data: string) => parseColor(data),
+  serialize: (v) => v.toString(v.getFormat()),
+  deserialize: (data: string) => parseColor(data),
 })
