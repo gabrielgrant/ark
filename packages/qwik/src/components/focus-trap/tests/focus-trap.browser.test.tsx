@@ -1,4 +1,5 @@
 import { $ } from '@qwik.dev/core'
+import { whenMachinesStarted } from '@zag-js/qwik'
 import { userEvent } from '@vitest/browser/context'
 import { expect, it } from 'vitest'
 import { render } from 'vitest-browser-qwik'
@@ -34,7 +35,9 @@ it('does not trap focus when disabled', async () => {
   )
   const trap = screen.getByTestId('trap').element() as HTMLElement
 
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  // the machine has started (adapter's whenMachinesStarted) and still did
+  // not activate the trap -- replaces an arbitrary fixed wait
+  await whenMachinesStarted()
   expect(trap.contains(document.activeElement)).toBe(false)
   expect(calls).toEqual([])
 })
