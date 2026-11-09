@@ -26,15 +26,18 @@ const MultiCheckbox = component$(() => (
  * Rendered via real SSR + browser resume (renderSSR), then interacted with in
  * arbitrary order.
  *
- * SKIPPED pending a released vitest-browser-qwik with the SSR-resume fix.
- * The upstream defect (QRL segment fetches 404 after renderSSR resume) is
- * fixed on the fork branch gabrielgrant/vitest-browser-qwik#fix/ssr-segment-mapping
- * (regression-tested there, 17/17, incl. a TS-source node_modules dependency
- * case). Running THIS test against the patched plugin inside ark is still
- * blocked by bun-layout dev-server issues unrelated to the fix (multi-instance
- * .bun trees break the node-side client env's module resolution; zag adapter
- * segments served via /@fs from out-of-root paths). Re-enable once ark consumes
- * a published plugin version containing the fix.
+ * SKIPPED: renderSSR + zag-adapter wake replay still fails, now differently.
+ * History: on vitest-browser-qwik 0.3.8 the resume broke in the harness
+ * itself (QRL segment fetches 404 after renderSSR; fixed independently on
+ * the fork gabrielgrant/vitest-browser-qwik#fix/ssr-segment-mapping and,
+ * by a different approach, in upstream 0.3.11 — the wake QRL now runs).
+ * On 0.3.11 + the rc.4 adapter branch, the failure moved into the
+ * adapter's wake replay: replayOne()'s getDomContainer(item.element)
+ * throws Q24 "Unable to find q:container" (multi-machine case), and a
+ * single-machine variant hangs the run — consistent with the captured
+ * element being replaced/detached by the activation render before the
+ * replay runs. Needs an adapter-side look; zag's own e2e-qwik app (real
+ * SSR + qwikloader) is the authoritative environment for the wake path.
  */
 it.skip('resumes multiple SSR machines independently and wakes each on interaction', async () => {
   const screen = await renderSSR(<MultiCheckbox />)
