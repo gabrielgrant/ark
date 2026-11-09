@@ -20,7 +20,9 @@ tests + browser interaction suites, every commit individually gated
 (typecheck / lint / headless / browser). Remaining work: infrastructure steps
 I2 (library build), I4 (EnvironmentProvider SSR), I5 (asChild), I6
 (interaction provider); website wiring (Phase 4); upstream filings; and the
-zag-adapter fixes listed in Part 5 #0–#0c (pending maintainer sign-off).**
+zag-adapter fixes listed in Part 5 #0–#0c — #0/#0b/#0c are RESOLVED by the
+rebased adapter branch `claude/confident-sagan-d2abxy` (Qwik 2.0.0-rc.4 +
+Vite 8.3.5, zag 1.47.0); see the updated Part 5.**
 
 | Concern | Status |
 | --- | --- |
@@ -39,7 +41,7 @@ zag-adapter fixes listed in Part 5 #0–#0c (pending maintainer sign-off).**
 | Remaining ~57 components, website, release | ❌ Phases 2–4 |
 
 **Key dependency fact:** `@zag-js/qwik` is an **unpublished fork** (version
-`1.31.1`) living on a branch of the `zag` repo. It is NOT on npm. See Part 1 —
+`1.42.0`) living on a branch of the `zag` repo. It is NOT on npm. See Part 1 —
 a fresh `bun install` fails without the bootstrap step.
 
 ---
@@ -47,7 +49,7 @@ a fresh `bun install` fails without the bootstrap step.
 ## Part 1 — Bootstrap (do this first, nothing works without it)
 
 ⚠️ **A fresh checkout of this branch does not install.** `packages/qwik`
-depends on `@zag-js/qwik@1.31.1`, which 404s on npm. The whole Bun workspace
+depends on `@zag-js/qwik@1.42.0`, which 404s on npm. The whole Bun workspace
 install fails until you link the local Zag checkout.
 
 1. **Clone the Zag fork as a sibling** of the ark repo (the link script finds
@@ -56,7 +58,7 @@ install fails until you link the local Zag checkout.
    ```bash
    # layout must be:  <parent>/ark  and  <parent>/zag
    git clone https://github.com/gabrielgrant/zag ../zag
-   cd ../zag && git checkout qwik-adapter-f   # the Qwik adapter branch
+   cd ../zag && git checkout claude/confident-sagan-d2abxy   # the Qwik adapter branch (Qwik 2.0.0-rc.4 + Vite 8.3.5, zag machines 1.47.0)
    ```
 
    The adapter lives at `zag/packages/frameworks/qwik`. **Treat the zag repo
@@ -94,17 +96,11 @@ install fails until you link the local Zag checkout.
 - Version skew between Playwright and a pre-installed Chromium can make the
   runner hang at startup; prefer `playwright install chromium` where the
   network allows.
-- bun installs reset @internationalized/date transitive links: zag packages
-  pin a 3.12.1 devDep colliding with the workspace's 3.12.2, causing nominal
-  `#private` type errors — re-link
-  `node_modules/.bun/@zag-js+date-{input,picker,utils}*/…/@internationalized/date`
-  to 3.12.2 after every install (node_modules-only).
-- bun does not resolve transitive deps for some deep file:-linked packages:
-  `@zag-js/popper`'s `@floating-ui/*` (and dom-query/utils) can be missing
-  from its .bun instance, breaking typecheck for popper consumers
-  (popover/tooltip/hover-card). Symlink them into
-  `node_modules/.bun/@zag-js+popper*/node_modules/@zag-js/popper/node_modules/`
-  (node_modules-only fix; never touches package.json/bun.lock).
+- HISTORICAL (pre-rc.4 branch): earlier zag pinned @internationalized/date
+  3.12.1 (vs the workspace's 3.12.2) and bun's .bun tree needed manual
+  relinks for that and for @zag-js/popper's @floating-ui deps. On the
+  rebased branch (zag pins 3.12.4; ark's qwik package pins the same) a
+  plain `local:sync` install typechecks with NO manual relinks.
 - If Vite hangs at "[optimizer] scanning dependencies", the dep-scan is
   choking on the ~86 path-linked Zag TS-source packages. Clear
   `node_modules/.vite` first; only if it persists add
@@ -363,7 +359,7 @@ asserting `aria-valuenow`) over pointer dragging.
 ```
 packages/qwik/
 ├── PLAN.md                       ← this file
-├── package.json                  ← deps pinned; @zag-js/qwik 1.31.1 (unpublished, Part 1)
+├── package.json                  ← deps pinned; @zag-js/qwik 1.42.0 (unpublished, Part 1)
 ├── tsconfig.json                 ← jsxImportSource: @qwik.dev/core
 ├── biome.json                    ← disables useQwikValidLexicalScope (false-positives
 │                                    on non-QRL utility closures)
@@ -557,45 +553,57 @@ broken, that is a Zag-adapter fix — discuss before changing zag.
 
 ## Part 5 — Known issues & open questions (ranked)
 
-0. **Zag adapter: root-level machine effects only run on the first
-   INIT_STATE transition** — a machine that starts (and stays) in its initial
-   state never attaches root effects. Concrete symptom: tooltip's
-   `trackFocusVisible` never wires, so keyboard-focus never opens a tooltip
-   (confirmed with a standalone @zag-js/focus-visible repro; the browser test
-   uses hover instead, documented in the test file). THIS IS A ZAG-ADAPTER
-   FIX (machine.ts effect lifecycle) — do not change zag without maintainer
-   sign-off; flagged for discussion.
+0. **RESOLVED (rebased adapter branch): root effects on idle machines.**
+   Tooltip now opens on keyboard focus — covered by
+   `tooltip/tests/tooltip-focus-visible.browser.test.tsx`.
 
-0b. **Zag adapter: capture-phase re-dispatch can swallow clicks.** A real
-   pointer click on an element whose ANCESTOR has tabIndex + an onFocus
-   handler calling `event.stopPropagation()` (tree-view items) loses the
-   click through the adapter's document-capture `wrapHandler` re-dispatch.
-   Isolated by bisection (raw div fine; zag-wired div broken; removing the
-   onFocus fixes it). Tests work around via native `element.click()`. Same
-   do-not-touch-zag rule; flagged for discussion together with #0.
+0b. **RESOLVED (rebased adapter branch): capture re-dispatch click swallow.**
+   A real Playwright pointer click on tree-view's branch trigger works as a
+   file's FIRST render — covered by
+   `tree-view/tests/tree-view-pointer-click.browser.test.tsx` (also
+   date-input contentEditable segment focus,
+   `date-input/tests/date-input-pointer-click.browser.test.tsx`).
+   The native `element.click()` workarounds in older multi-test files are
+   still needed, but ONLY because of the new Qwik issue #0q below (second
+   and later containers on a page), not the adapter.
 
-0c. **Zag adapter: rAF render-gate livelocks.** Two blocked-interactive-test
-   cases in the same family: (a) any zag toast Timer/setRafTimeout scheduling
-   (auto-dismiss durations, removeDelay) hangs the Chromium harness
-   post-interaction; (b) tour livelocks once any part subscribes to the R2
-   store — bisected to tour's `trackBoundarySize` root effect
-   (resize→context-write→re-render feedback) interacting with the adapter's
-   `installRafRenderGate`. Affected browser tests are skipped with re-enable
-   instructions in-file. Adapter/machine-side fixes; discuss with maintainer.
+0c. **RESOLVED (rebased adapter branch): rAF render-gate livelocks.** Toast
+   show→dismiss and the full tour flow pass end to end; both suites are
+   re-enabled (toast's interactive test must stay its file's first render,
+   see #0q). Tour additionally needed fixture fixes that only matter in a
+   real browser: backdrop before positioner in DOM order, and the consumer
+   CSS stacking/centering zag ships in its shared tour.css.
 
-0d. **Test-env notes for drag-capable machines**: Playwright pointer clicks
-   stall on drawer/floating-panel (use native element.click()); drawer's
-   module-level registry singleton forbids a second render() per browser-test
-   file ("signals across containers"); allow a ~250ms settle before unmount
-   to avoid rAF-deferred teardown races (the rotating insertBefore flake).
+0d. **Test-env notes for drag-capable machines** (partially stale):
+   a synthetic pointer-drag sequence on slider now works
+   (`slider/tests/slider-pointer-drag.browser.test.tsx`); the ~250ms settle
+   before unmount for drawer/floating-panel is still in place.
+
+0q. **NEW — Qwik core 2.0.0-rc.4 regression: second-container event
+   dispatch.** The second and every later client `render()` into one
+   document loses synchronous element dispatch: handlers run async after
+   native propagation, so `stopPropagation()` in a child handler cannot
+   shield an ancestor's handler (tree-view trigger/control double-toggle)
+   and conditional `preventDefault` cannot work. Verified correct on
+   2.0.0-beta.36 by swapping only @qwik.dev/core; no zag involved. MCVE +
+   full notes: `src/qwik-regressions/second-container-event-dispatch.browser.test.tsx`.
+   Practical rule: any browser test whose semantics depend on synchronous
+   dispatch must be its FILE'S FIRST `render()`. Candidate for an upstream
+   QwikDev/qwik report.
 
 1. **Wake path under streaming SSR with many machines** — test written
-   (`checkbox-ssr.browser.test.tsx`) but SKIPPED: vitest-browser-qwik's
-   `renderSSR` cannot resume ANY component in this harness (qwikloader segment
-   fetches 404 on the vitest dev server; reproduced with a trivial local
-   `component$`, URL even lacks the /@fs/ prefix — upstream tooling bug, not
-   zag/Ark). Interim coverage: zag example app's Playwright e2e. Re-enable the
-   test when the harness serves SSR segment modules.
+   (`checkbox-ssr.browser.test.tsx`), still SKIPPED but the failure moved:
+   vitest-browser-qwik 0.3.11 fixed the old segment-404s (the wake QRL now
+   runs; the fork fix on
+   gabrielgrant/vitest-browser-qwik#fix/ssr-segment-mapping is superseded
+   unless its regression tests are still wanted upstream). Now the
+   adapter's wake replay fails in this harness: `replayOne()`'s
+   `getDomContainer(item.element)` throws Q24 (multi-machine) or the run
+   hangs (single-machine) — consistent with the captured element being
+   replaced by the activation render before replay. Adapter-side
+   investigation needed; zag's own e2e-qwik app remains the authoritative
+   wake-path coverage.
+
 2. **EnvironmentProvider custom value over SSR** (I4).
 3. **`asChild`** (I5) — API-parity gap to document if dropped.
 4. **Qwik 2 beta churn** — pin `@qwik.dev/core` exactly; expect breakage on
